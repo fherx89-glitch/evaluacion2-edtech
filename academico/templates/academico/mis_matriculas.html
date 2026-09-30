@@ -1,0 +1,172 @@
+{% extends 'academico/base.html' %}
+{% load humanize %}
+{% load moneda_tags %}
+
+{% block title %}Mis Matrículas | EdTech Portal{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Encabezado -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h2 class="fw-bold text-dark mb-1">
+                <i class="bi bi-journal-check text-primary me-2"></i> Mis Matrículas Realizadas
+            </h2>
+            <p class="text-muted small mb-0">Historial oficial de cursos y bootcamps formalizados en la plataforma.</p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <a href="{% url 'catalogo' %}" class="btn btn-primary-gradient py-2 px-3 small">
+                <i class="bi bi-plus-lg me-1"></i> Explorar Más Cursos
+            </a>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Métricas del Estudiante -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card card-custom p-3 border-0 shadow-sm bg-white">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-primary-subtle text-primary">
+                        <i class="bi bi-book-half fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Cursos Oficiales</div>
+                        <div class="fs-4 fw-bold text-dark">{{ total_cursos }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-custom p-3 border-0 shadow-sm bg-white">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-success-subtle text-success">
+                        <i class="bi bi-cash-stack fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Inversión Total (Pagado)</div>
+                        <div class="fs-4 fw-bold text-success">{{ total_invertido|formato_clp }} CLP</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card card-custom p-3 border-0 shadow-sm bg-white">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-info-subtle text-info">
+                        <i class="bi bi-receipt-cutoff fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Órdenes de Matrícula</div>
+                        <div class="fs-4 fw-bold text-dark">{{ matriculas.count }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Listado de Matrículas -->
+    {% if matriculas %}
+        <div class="d-flex flex-column gap-4">
+            {% for m in matriculas %}
+                <div class="card card-custom border-0 shadow-sm overflow-hidden" id="matricula-card-{{ m.id }}">
+                    
+                    <!-- Encabezado de la Matrícula -->
+                    <div class="p-4 bg-light border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
+                        <div>
+                            <span class="badge bg-secondary-subtle text-secondary border px-2 py-1 mb-1">
+                                Comprobante: {{ m.codigo_comprobante }}
+                            </span>
+                            <h5 class="fw-bold text-dark mb-0">Orden de Matrícula #{{ m.id|stringformat:"05d" }}</h5>
+                            <span class="small text-muted">
+                                <i class="bi bi-clock-history me-1"></i> Fecha de emisión: {{ m.fecha_creacion|date:"d/m/Y H:i" }} hrs.
+                            </span>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-3">
+                            <!-- Estado de la matrícula -->
+                            {% if m.estado == 'PAGADO' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6 rounded-pill">
+                                    <i class="bi bi-check-circle-fill me-1"></i> PAGADO
+                                </span>
+                            {% elif m.estado == 'CANCELADO' %}
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 rounded-pill">
+                                    <i class="bi bi-x-circle-fill me-1"></i> CANCELADO
+                                </span>
+                            {% else %}
+                                <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-3 py-2 fs-6 rounded-pill">
+                                    <i class="bi bi-hourglass-split me-1"></i> PENDIENTE
+                                </span>
+                            {% endif %}
+
+                            <!-- Monto Total -->
+                            <div class="text-end">
+                                <div class="text-muted small" style="font-size: 0.72rem;">TOTAL ABONADO</div>
+                                <div class="fs-4 fw-bold text-primary">{{ m.total_clp }} CLP</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Detalle de Cursos Matriculados -->
+                    <div class="p-4">
+                        <h6 class="small text-uppercase fw-bold text-muted mb-3">
+                            <i class="bi bi-mortarboard me-1"></i> Programas Incluidos en esta Matrícula:
+                        </h6>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr class="text-muted small">
+                                        <th>Programa Académico</th>
+                                        <th>Área</th>
+                                        <th>Periodo de Clases</th>
+                                        <th class="text-end">Precio Histórico</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for det in m.detalles.all %}
+                                        <tr>
+                                            <td class="py-2">
+                                                <div class="fw-semibold text-dark">{{ det.curso.titulo }}</div>
+                                            </td>
+                                            <td class="py-2">
+                                                <span class="badge-area-pill" style="font-size: 0.68rem;">{{ det.curso.area.nombre }}</span>
+                                            </td>
+                                            <td class="py-2 text-muted small">
+                                                {{ det.curso.fecha_inicio|date:"d M Y" }} &rarr; {{ det.curso.fecha_termino|date:"d M Y" }}
+                                            </td>
+                                            <td class="py-2 text-end fw-bold text-dark">
+                                                {{ det.precio_historico_clp }} CLP
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <!-- Estado Vacío -->
+        <div class="text-center py-5">
+            <div class="card card-custom p-5 border-0 shadow-sm mx-auto" style="max-width: 500px;">
+                <div class="p-4 rounded-circle bg-light d-inline-flex align-items-center justify-content-center mx-auto mb-3" style="width: 90px; height: 90px;">
+                    <i class="bi bi-file-earmark-x text-muted" style="font-size: 3rem;"></i>
+                </div>
+                <h3 class="fw-bold text-dark mb-2">No tienes matrículas</h3>
+                <p class="text-muted small mb-4">Aún no has formalizado la matrícula en ningún curso o bootcamp.</p>
+                <div>
+                    <a href="{% url 'catalogo' %}" class="btn btn-primary-gradient px-4 py-2">
+                        <i class="bi bi-search me-1"></i> Explorar Catálogo de Cursos
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

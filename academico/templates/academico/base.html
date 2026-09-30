@@ -1,0 +1,688 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es" class="h-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Plataforma EdTech{% endblock %} | Reservas y Matrículas</title>
+    
+    <!-- Meta SEO & Académico -->
+    <meta name="description" content="Plataforma de Reservas de Cursos y Bootcamps (EdTech) - Fernando Pailahueque | AP-N4-C2 | 2026">
+    <meta name="author" content="Fernando Pailahueque">
+
+    <!-- Script de Inicialización y Persistencia de Identidad Visual Institucional -->
+    <script>
+      /* ¿Por qué ejecutamos este script en el <head> y con localStorage?:
+         Aquí utilicé la ejecución inmediata en el <head> antes del renderizado completo del DOM
+         para evitar el molesto parpadeo blanco/estilo previo (Flash of Unstyled Content - FOUC).
+         Guardamos la selección en localStorage ('edtech_theme') para que la identidad elegida
+         por el Coordinador persista automáticamente entre recargas y cambios de página sin requerir
+         llamadas adicionales a la base de datos. */
+      function setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('edtech_theme', theme);
+      }
+      // Cargar tema guardado al iniciar
+      const savedTheme = localStorage.getItem('edtech_theme') || 'esmeralda';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5.3.3 CSS CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    
+    <!-- Bootstrap Icons CDN -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+    <!-- Custom EdTech Visual Architecture -->
+    <style>
+        /* ==========================================================================
+           1. SISTEMA DE TOKENS Y PALETA DE DISEÑO (CSS CUSTOM PROPERTIES)
+           ¿Por qué se usa esto?: Centralizamos las variables globales en :root para
+           mantener coherencia cromática y facilitar el mantenimiento de estilos.
+           ========================================================================== */
+        :root {
+            /* Variables institucionales requeridas para Identidad Visual */
+            --primary-accent: #059669; /* Esmeralda por defecto */
+            --hero-gradient-start: #022c22;
+            --hero-gradient-end: #0f766e;
+            --btn-primary-bg: #059669;
+            --btn-primary-hover: #047857;
+            --badge-border: #059669;
+
+            /* Barra Superior y Acentos Visuales */
+            --navbar-bg: #02241d; /* Esmeralda oscuro profundo */
+            --navbar-border: rgba(5, 150, 105, 0.25);
+            --navbar-brand-accent: #34d399;
+
+            /* Índigo académico primario y derivados vinculados a la identidad activa */
+            --ed-primary: var(--primary-accent);
+            --ed-primary-hover: var(--btn-primary-hover);
+            --ed-primary-light: rgba(5, 150, 105, 0.12);
+            --ed-secondary: #0ea5e9;
+            --ed-dark: #0f172a;
+            --ed-surface: #ffffff;
+
+            /* Fondo Canvas Global */
+            --ed-bg: #e5ebf3;
+            --ed-border: #cbd5e1;
+            --ed-text: #1e293b;
+            --ed-muted: #64748b;
+            --ed-success: #10b981;
+            --ed-warning: #f59e0b;
+            --ed-danger: #ef4444;
+
+            /* Gradiente institucional */
+            --ed-gradient-primary: linear-gradient(135deg, var(--hero-gradient-start) 0%, var(--primary-accent) 50%, var(--hero-gradient-end) 100%);
+            --ed-gradient-card: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+
+            /* Sistema de Sombras */
+            --ed-shadow-sm: 0 2px 5px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+            --ed-shadow-md: 0 8px 20px -3px rgba(15, 23, 42, 0.11), 0 3px 6px -2px rgba(15, 23, 42, 0.06);
+            --ed-shadow-lg: 0 12px 28px -4px rgba(15, 23, 42, 0.14), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+            --ed-shadow-xl: 0 22px 38px -5px rgba(15, 23, 42, 0.18), 0 8px 16px -4px rgba(15, 23, 42, 0.09);
+        }
+
+        /* Tema 1: Esmeralda Tech (Por defecto / Recomendado) */
+        [data-theme="esmeralda"] {
+            --primary-accent: #059669;
+            --hero-gradient-start: #022c22;
+            --hero-gradient-end: #0f766e;
+            --btn-primary-bg: #059669;
+            --btn-primary-hover: #047857;
+            --badge-border: #059669;
+            --ed-primary: #059669;
+            --ed-primary-hover: #047857;
+            --ed-primary-light: #d1fae5;
+            --navbar-bg: #02241d;
+            --navbar-border: rgba(5, 150, 105, 0.25);
+            --navbar-brand-accent: #34d399;
+        }
+
+        /* Tema 2: Púrpura Cyber */
+        [data-theme="purpura"] {
+            --primary-accent: #7c3aed;
+            --hero-gradient-start: #2e1065;
+            --hero-gradient-end: #5b21b6;
+            --btn-primary-bg: #7c3aed;
+            --btn-primary-hover: #6d28d9;
+            --badge-border: #7c3aed;
+            --ed-primary: #7c3aed;
+            --ed-primary-hover: #6d28d9;
+            --ed-primary-light: #ede9fe;
+            --navbar-bg: #1c0a35;
+            --navbar-border: rgba(124, 58, 237, 0.25);
+            --navbar-brand-accent: #c084fc;
+        }
+
+        /* Tema 3: Azul Medianoche (Original) */
+        [data-theme="azul"] {
+            --primary-accent: #3b82f6;
+            --hero-gradient-start: #0f172a;
+            --hero-gradient-end: #1e3a8a;
+            --btn-primary-bg: #2563eb;
+            --btn-primary-hover: #1d4ed8;
+            --badge-border: #3b82f6;
+            --ed-primary: #2563eb;
+            --ed-primary-hover: #1d4ed8;
+            --ed-primary-light: #dbeafe;
+            --navbar-bg: #0f172a;
+            --navbar-border: rgba(59, 130, 246, 0.25);
+            --navbar-brand-accent: #38bdf8;
+        }
+
+        /* Tema 4: Carmesí Vulcano */
+        [data-theme="rojo"], [data-theme="carmesi"] {
+            --primary-accent: #e11d48;
+            --hero-gradient-start: #3b0707;
+            --hero-gradient-end: #9f1239;
+            --btn-primary-bg: #e11d48;
+            --btn-primary-hover: #be123c;
+            --badge-border: #e11d48;
+            --ed-primary: #e11d48;
+            --ed-primary-hover: #be123c;
+            --ed-primary-light: #ffe4e6;
+            --navbar-bg: #220509;
+            --navbar-border: rgba(225, 29, 72, 0.28);
+            --navbar-brand-accent: #fb7185;
+        }
+
+        /* ¿Por qué se define en body?: Asegura que todo el viewport tenga el fondo
+           gris neutro base y use tipografía moderna 'Inter' con fallback del sistema. */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--ed-bg);
+            color: var(--ed-text);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        h1, h2, h3, h4, h5, h6, .navbar-brand, .font-heading {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Navbar Estilo Moderno con Efecto Glassmorphism y Tema Dinámico */
+        .navbar-edtech {
+            background: var(--navbar-bg, #0f172a) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--navbar-border, rgba(255, 255, 255, 0.08));
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25);
+            transition: background 0.35s ease, border-color 0.35s ease;
+        }
+
+        .navbar-brand {
+            font-weight: 800;
+            font-size: 1.35rem;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #ffffff 0%, var(--primary-accent) 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            transition: all 0.3s ease;
+        }
+
+        .navbar-brand .brand-icon {
+            color: var(--primary-accent) !important;
+            transition: color 0.3s ease;
+        }
+
+        .brand-portal-text {
+            color: var(--navbar-brand-accent, #38bdf8);
+            transition: color 0.3s ease;
+        }
+
+        .user-nav-icon {
+            color: var(--navbar-brand-accent, #38bdf8) !important;
+            transition: color 0.3s ease;
+        }
+
+        .nav-link {
+            font-weight: 500;
+            color: #cbd5e1 !important;
+            padding: 0.5rem 0.9rem !important;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-link:hover {
+            color: #ffffff !important;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .nav-link.active {
+            color: #ffffff !important;
+            background: rgba(255, 255, 255, 0.12) !important;
+            box-shadow: inset 0 -2px 0 0 var(--primary-accent);
+        }
+
+        /* Botón Carrito con badge dinámico */
+        .btn-cart-nav {
+            position: relative;
+            background: rgba(255, 255, 255, 0.08);
+            color: var(--navbar-brand-accent, #a5b4fc) !important;
+            border: 1px solid var(--navbar-border, rgba(255, 255, 255, 0.2));
+            border-radius: 10px;
+            padding: 0.45rem 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .btn-cart-nav:hover {
+            background: rgba(255, 255, 255, 0.16);
+            color: #ffffff !important;
+            transform: translateY(-1px);
+        }
+
+        .cart-badge-count {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #ef4444;
+            color: white;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 0.15rem 0.45rem;
+            border-radius: 9999px;
+            box-shadow: 0 2px 4px rgba(239, 68, 68, 0.4);
+        }
+
+        /* ==========================================================================
+           2. ARQUITECTURA DE TARJETAS (CARDS) CON RELIEVE Y PROFUNDIDAD
+           ¿Por qué usamos esta estructura?:
+           1. background-color: #ffffff -> Base blanca pura que contrasta fuertemente con el fondo #e5ebf3.
+           2. border: 1.5px solid #cbd5e1 -> Contorno sólido y visible (slate-300) que define la silueta.
+           3. box-shadow multicapa -> Sombra profunda que proyecta la tarjeta hacia adelante (relieve táctil).
+           4. overflow: hidden -> Mantiene el ribete superior ::before y el pie perfectamente recortados.
+           ========================================================================== */
+        .card-custom, .card-curso {
+            background-color: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px -4px rgba(15, 23, 42, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.06);
+            transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                        box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1), 
+                        border-color 0.28s ease;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Franja de Acento Superior (Accent Stripe):
+           Ribete decorativo de 5px con degradado que rompe el borde superior con una línea de color vivo. */
+        .card-curso::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 5px;
+            background: linear-gradient(90deg, var(--hero-gradient-start) 0%, var(--primary-accent) 50%, var(--hero-gradient-end) 100%);
+            z-index: 2;
+            transition: background 0.3s ease;
+        }
+
+        /* Efecto Hover: Eleva la tarjeta 6px en el eje Y y amplifica la sombra
+           para dar respuesta táctil inmediata al pasar el cursor. */
+        .card-custom:hover, .card-curso:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 35px -5px rgba(15, 23, 42, 0.18), 0 8px 16px -4px rgba(15, 23, 42, 0.08);
+            border-color: #94a3b8;
+        }
+
+        /* ==========================================================================
+           3. FICHA TÉCNICA INTERNA (FECHAS Y OCUPACIÓN DE CUPOS)
+           ¿Por qué usamos un gradiente, borde definido y sombra inset?:
+           Crea un bajo relieve real tipo pantalla empotrada dentro de la tarjeta blanca.
+           El borde #cbd5e1 y la sombra inset generan un efecto de hendidura física limpia.
+           ========================================================================== */
+        .card-ficha-tecnica {
+            background: linear-gradient(180deg, #f8fafc 0%, #edf2f7 100%);
+            border: 1.5px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 0.95rem 1rem;
+            box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(255, 255, 255, 0.8);
+        }
+
+        /* ==========================================================================
+           4. PIE DE TARJETA DIFERENCIADO (ACTION & PRICING BAR)
+           ¿Por qué fondo degradado pizarra suave?:
+           Al usar un fondo degradado #f8fafc a #f1f5f9 con borde superior #cbd5e1,
+           la tarjeta se subdivide de manera natural en cuerpo informativo arriba
+           y barra de comando/compra abajo, sin perder uniformidad estética.
+           ========================================================================== */
+        .card-footer-action {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+            border-top: 1.5px solid #cbd5e1;
+            padding: 1.25rem 1.25rem;
+            margin-top: auto;
+        }
+
+        /* Separador punteado suave como refuerzo delimitador */
+        .card-precio-divider {
+            border-top: 1px dashed #cbd5e1 !important;
+        }
+
+        .badge-cupo-disponible {
+            background-color: #ecfdf5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+            font-weight: 600;
+        }
+
+        .badge-cupo-agotado {
+            background-color: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            font-weight: 600;
+        }
+
+        .badge-area-pill {
+            background: #eef2ff;
+            color: #4338ca;
+            border: 1px solid #c7d2fe;
+            font-weight: 600;
+            font-size: 0.75rem;
+            letter-spacing: 0.3px;
+            padding: 0.35rem 0.75rem;
+            border-radius: 9999px;
+        }
+
+        /* Botones Principales (.btn-primary y "Agregar al Carro" / "Gestionar") */
+        .btn-primary {
+            background-color: var(--btn-primary-bg) !important;
+            border-color: var(--btn-primary-bg) !important;
+            color: #ffffff !important;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+            background-color: var(--btn-primary-hover) !important;
+            border-color: var(--btn-primary-hover) !important;
+            color: #ffffff !important;
+            transform: translateY(-1px);
+        }
+
+        .btn-primary-gradient {
+            background: linear-gradient(135deg, var(--btn-primary-bg) 0%, var(--primary-accent) 100%) !important;
+            border: none;
+            color: #ffffff !important;
+            font-weight: 600;
+            border-radius: 10px;
+            padding: 0.6rem 1.25rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.18);
+        }
+
+        .btn-primary-gradient:hover {
+            background: linear-gradient(135deg, var(--btn-primary-hover) 0%, var(--btn-primary-bg) 100%) !important;
+            color: #ffffff !important;
+            transform: translateY(-1px);
+            box-shadow: 0 8px 12px -2px rgba(0, 0, 0, 0.25);
+        }
+
+        .btn-outline-primary {
+            color: var(--primary-accent) !important;
+            border-color: var(--primary-accent) !important;
+            font-weight: 600;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-outline-primary:hover, .btn-outline-primary:focus, .btn-outline-primary:active {
+            background-color: var(--primary-accent) !important;
+            border-color: var(--primary-accent) !important;
+            color: #ffffff !important;
+            transform: translateY(-1px);
+        }
+
+        .btn-outline-custom {
+            border: 1.5px solid var(--ed-border);
+            color: var(--ed-text);
+            font-weight: 600;
+            border-radius: 10px;
+            background: white;
+            transition: all 0.2s ease;
+        }
+
+        .btn-outline-custom:hover {
+            border-color: var(--primary-accent);
+            color: var(--primary-accent);
+            background: var(--ed-primary-light);
+        }
+
+        /* Badges y acentos con variables del tema institucional */
+        .bg-primary {
+            background-color: var(--primary-accent) !important;
+        }
+
+        .badge-theme-accent {
+            border: 1px solid var(--badge-border) !important;
+            color: var(--primary-accent) !important;
+        }
+
+        /* Hero Banner */
+        .hero-banner {
+            background: linear-gradient(135deg, var(--hero-gradient-start) 0%, var(--hero-gradient-end) 100%) !important;
+            color: white;
+            border-radius: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: background 0.35s ease;
+        }
+
+        .hero-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, rgba(0,0,0,0) 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+
+        /* FOOTER FIJO OBLIGATORIO */
+        .footer-obligatorio {
+            background-color: var(--navbar-bg, #0f172a);
+            color: #94a3b8;
+            border-top: 1px solid var(--navbar-border, rgba(255, 255, 255, 0.08));
+            padding: 1.1rem 0;
+            margin-top: auto;
+            font-size: 0.9rem;
+            transition: background 0.35s ease, border-color 0.35s ease;
+        }
+
+        .footer-obligatorio .highlight-student {
+            color: var(--navbar-brand-accent, #38bdf8);
+            font-weight: 700;
+            transition: color 0.3s ease;
+        }
+
+        .footer-obligatorio .highlight-meta {
+            color: #f1f5f9;
+            font-weight: 600;
+        }
+
+        /* Alertas Flotantes */
+        .alert-dismissible {
+            border-radius: 12px;
+            box-shadow: var(--ed-shadow-md);
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="d-flex flex-column h-100">
+
+    <!-- NAVBAR INSTITUCIONAL -->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-edtech sticky-top">
+        <div class="container">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'catalogo' %}" id="nav-brand-link">
+                <i class="bi bi-mortarboard-fill brand-icon" style="font-size: 1.5rem;"></i>
+                <span>EdTech<span class="brand-portal-text">Portal</span></span>
+            </a>
+
+            <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navbarEdTechContent" aria-controls="navbarEdTechContent" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarEdTechContent">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.resolver_match.url_name == 'catalogo' %}active{% endif %}" href="{% url 'catalogo' %}" id="nav-catalogo-link">
+                            <i class="bi bi-grid-3x3-gap-fill me-1"></i> Catálogo de Cursos
+                        </a>
+                    </li>
+                    
+                    {% comment %}
+                    ¿Por qué validamos 'request.user.role == ESTUDIANTE'?:
+                    Aquí utilicé esta validación estricta porque 'Mis Matrículas' es un panel de autoservicio
+                    académico exclusivo del alumno. Los coordinadores no cursan programas ni deben ver accesos a historial estudiantil propio.
+                    {% endcomment %}
+                    {% if request.user.is_authenticated and request.user.role == 'ESTUDIANTE' %}
+                        <!-- Mis Matrículas: visible solo para ESTUDIANTES -->
+                        <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'mis_matriculas' %}active{% endif %}" href="{% url 'mis_matriculas' %}" id="nav-matriculas-link">
+                                <i class="bi bi-journal-check me-1"></i> Mis Matrículas
+                            </a>
+                        </li>
+                    {% endif %}
+
+                        {# Rutas exclusivas: SOLO visibles para rol COORDINADOR o STAFF #}
+                        {% if user.rol == 'COORDINADOR' or user.role == 'COORDINADOR' or user.is_staff or user.is_coordinador %}
+                            <li class="nav-item">
+                                <a class="nav-link text-warning fw-semibold {% if request.resolver_match.url_name == 'panel_coordinador' %}active{% endif %}" href="{% url 'panel_coordinador' %}" id="nav-coordinador-link">
+                                    <i class="bi bi-speedometer2 me-1"></i> Panel Coordinador
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link text-info" href="{% url 'swagger-ui' %}" target="_blank" id="nav-swagger-link" title="Documentación Interactiva Swagger OpenAPI">
+                                    <i class="bi bi-code-square me-1"></i> API Swagger
+                                </a>
+                            </li>
+                        {% endif %}
+                </ul>
+
+                <!-- Acciones de Usuario y Carrito -->
+                <div class="d-flex align-items-center gap-3">
+                    {% comment %}
+                    ¿Por qué restringir 'Mi Carro' solo a ESTUDIANTE autenticado?:
+                    Aquí utilicé 'request.user.is_authenticated and request.user.role == ESTUDIANTE'
+                    porque los usuarios visitantes y el rol COORDINADOR no realizan compras de matrícula;
+                    ocultar el carro a anónimos y coordinadores mantiene limpia y coherente la barra institucional.
+                    {% endcomment %}
+                    {% if request.user.is_authenticated and request.user.role == 'ESTUDIANTE' %}
+                        <a href="{% url 'carro' %}" class="btn-cart-nav d-flex align-items-center gap-2 text-decoration-none" id="nav-cart-btn" title="Ver mi carro de reservas">
+                            <i class="bi bi-cart3 fs-5"></i>
+                            <span class="d-none d-sm-inline fw-semibold">Mi Carro</span>
+                            {% if carro_total_items > 0 %}
+                                <span class="cart-badge-count" id="nav-cart-count-badge">{{ carro_total_items }}</span>
+                            {% elif cart_count > 0 %}
+                                <span class="cart-badge-count" id="nav-cart-count-badge">{{ cart_count }}</span>
+                            {% endif %}
+                        </a>
+                    {% endif %}
+
+                    {% comment %}
+                    ¿Por qué el Selector de Temas es exclusivo de COORDINADOR?:
+                    Aquí utilicé la restricción de rol COORDINADOR porque la identidad visual institucional
+                    representa una configuración directiva del campus que ningún alumno ni visitante debe alterar.
+                    {% endcomment %}
+                    {% if request.user.is_authenticated and request.user.role == 'COORDINADOR' %}
+                    <!-- Selector de Temas de Campus (Solo Coordinador) -->
+                    <div class="dropdown me-2">
+                        <button class="btn btn-sm btn-outline-light dropdown-toggle" type="button" id="themeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            🎨 Tema Campus
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end shadow" aria-labelledby="themeDropdown">
+                            <li><h6 class="dropdown-header text-muted">Identidad Institucional</h6></li>
+                            <li><a class="dropdown-item" href="javascript:setTheme('esmeralda')">🟢 Esmeralda Tech (Recomendado)</a></li>
+                            <li><a class="dropdown-item" href="javascript:setTheme('purpura')">🟣 Púrpura Cyber</a></li>
+                            <li><a class="dropdown-item" href="javascript:setTheme('azul')">🔵 Azul Medianoche</a></li>
+                            <li><a class="dropdown-item" href="javascript:setTheme('rojo')">🔴 Carmesí Vulcano</a></li>
+                        </ul>
+                    </div>
+                    {% endif %}
+
+                    {% if user.is_authenticated %}
+                        <div class="dropdown">
+                            <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center gap-2 py-1 px-3 rounded-pill" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="user-menu-btn" style="border-color: rgba(255,255,255,0.2);">
+                                <i class="bi bi-person-circle fs-5 user-nav-icon"></i>
+                                <span class="fw-medium small">{{ user.first_name|default:user.username }}</span>
+                                <span class="badge {% if user.is_coordinador or user.rol == 'COORDINADOR' or user.role == 'COORDINADOR' %}bg-warning text-dark{% else %}bg-primary{% endif %} rounded-pill ms-1" style="font-size: 0.68rem;">
+                                    {{ user.get_rol_display }}
+                                </span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 mt-2 p-2" style="border-radius: 12px;">
+                                <li class="px-3 py-2 border-bottom mb-1">
+                                    <div class="small text-muted">Sesión iniciada como:</div>
+                                    <div class="fw-bold text-dark">{{ user.username }}</div>
+                                    <div class="text-muted small">{{ user.email|default:"Sin email registrado" }}</div>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item rounded-2 py-2" href="{% url 'catalogo' %}">
+                                        <i class="bi bi-book me-2 text-primary"></i> Explorar Cursos
+                                    </a>
+                                </li>
+                                {% if request.user.role == 'ESTUDIANTE' %}
+                                    <li>
+                                        <a class="dropdown-item rounded-2 py-2" href="{% url 'carro' %}">
+                                            <i class="bi bi-cart3 me-2 text-success"></i> Mi Carro ({{ carro_total_items|default:cart_count|default:0 }})
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item rounded-2 py-2" href="{% url 'mis_matriculas' %}">
+                                            <i class="bi bi-award me-2 text-info"></i> Mis Matrículas
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                {% if user.rol == 'COORDINADOR' or user.role == 'COORDINADOR' or user.is_staff or user.is_coordinador %}
+                                    <li>
+                                        <a class="dropdown-item rounded-2 py-2" href="{% url 'panel_coordinador' %}">
+                                            <i class="bi bi-shield-lock me-2 text-warning"></i> Administración de Cupos
+                                        </a>
+                                    </li>
+                                    <li>
+                                        <a class="dropdown-item rounded-2 py-2" href="{% url 'swagger-ui' %}" target="_blank">
+                                            <i class="bi bi-code-square me-2 text-info"></i> API Swagger Docs
+                                        </a>
+                                    </li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider my-1"></li>
+                                <li>
+                                    <a class="dropdown-item rounded-2 py-2 text-danger" href="{% url 'logout' %}" id="logout-menu-item">
+                                        <i class="bi bi-box-arrow-right me-2"></i> Cerrar Sesión
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    {% else %}
+                        <a href="{% url 'login' %}" class="btn btn-primary-gradient py-1 px-3 d-flex align-items-center gap-1" id="login-nav-btn">
+                            <i class="bi bi-box-arrow-in-right"></i>
+                            <span>Iniciar Sesión</span>
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MENSAJES Y NOTIFICACIONES FLASH -->
+    <div class="container mt-3">
+        {% if messages %}
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'warning' %}warning{% elif message.tags == 'success' %}success{% else %}info{% endif %} alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
+                    {% if message.tags == 'error' %}
+                        <i class="bi bi-exclamation-octagon-fill fs-5"></i>
+                    {% elif message.tags == 'warning' %}
+                        <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    {% elif message.tags == 'success' %}
+                        <i class="bi bi-check-circle-fill fs-5"></i>
+                    {% else %}
+                        <i class="bi bi-info-circle-fill fs-5"></i>
+                    {% endif %}
+                    <div>{{ message }}</div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="flex-shrink-0 mb-5">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- FOOTER FIJO OBLIGATORIO SEGÚN PAUTA DE EVALUACIÓN -->
+    <footer class="footer-obligatorio text-center">
+        <div class="container">
+            <div class="row align-items-center gy-2">
+                <div class="col-md-6 text-md-start">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 me-2">
+                        <i class="bi bi-award-fill"></i> Caso 2: EdTech
+                    </span>
+                    <span class="text-white-50">Plataforma de Reservas de Cursos y Bootcamps</span>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <!-- TEXTO EXACTO EXIGIDO EN LA PAUTA -->
+                    <span class="highlight-meta">Alumno:</span> <span class="highlight-student">{{ ALUMNO_NOMBRE|default:"Fernando Pailahueque" }}</span> 
+                    <span class="text-secondary mx-2">|</span> 
+                    <span class="highlight-meta">Sección:</span> <span class="text-light fw-bold">{{ ALUMNO_SECCION|default:"AP-N4-C2" }}</span> 
+                    <span class="text-secondary mx-2">|</span> 
+                    <span class="highlight-meta">Año:</span> <span class="text-light fw-bold">{{ ALUMNO_ANIO|default:"2026" }}</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5 Bundle JS CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,519 @@
+{% extends 'academico/base.html' %}
+{% load humanize %}
+{% load moneda_tags %}
+
+{% block title %}Panel de Coordinación Académica | EdTech{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Encabezado del Panel -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge bg-warning text-dark px-2 py-1 fw-bold rounded-pill">
+                    <i class="bi bi-shield-lock-fill"></i> Rol Coordinador
+                </span>
+                <span class="text-muted small">Módulo de Administración Académica y Control de Cupos</span>
+            </div>
+            <h2 class="fw-bold text-dark mb-0">Panel de Control & Inventario de Cupos</h2>
+        </div>
+        <div class="mt-2 mt-sm-0 d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoCurso" id="btn-nuevo-curso-panel">
+                <i class="bi bi-plus-circle-fill me-1"></i> + Abrir Nuevo Bootcamp / Curso
+            </button>
+            <a href="{% url 'swagger-ui' %}" target="_blank" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-code-slash me-1"></i> Swagger API Docs
+            </a>
+            <a href="{% url 'catalogo' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-eye me-1"></i> Ver Catálogo Público
+            </a>
+        </div>
+    </div>
+
+    <!-- TARJETAS DE MÉTRICAS GLOBALES -->
+    <div class="row g-3 mb-4">
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-primary-subtle text-primary">
+                        <i class="bi bi-people-fill fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Estudiantes Registrados</div>
+                        <div class="fs-4 fw-bold text-dark">{{ total_estudiantes }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-info-subtle text-info">
+                        <i class="bi bi-grid-fill fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Cupos Ofertados</div>
+                        <div class="fs-4 fw-bold text-dark">{{ total_cupos_ofertados }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-warning-subtle text-warning">
+                        <i class="bi bi-person-fill-dash fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Cupos Ocupados</div>
+                        <div class="fs-4 fw-bold text-warning">{{ total_cupos_ocupados }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-6 col-lg-3">
+            <div class="card card-custom p-3 border-0 shadow-sm">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-3 rounded-circle bg-success-subtle text-success">
+                        <i class="bi bi-cash-coin fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Recaudación Total</div>
+                        <div class="fs-4 fw-bold text-success">{{ total_recaudado|formato_clp }} CLP</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 1: INVENTARIO DE CURSOS Y DISPONIBILIDAD DE CUPOS -->
+    <div class="card card-custom border-0 shadow-sm mb-5 overflow-hidden">
+        <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold text-dark mb-1">
+                    <i class="bi bi-bar-chart-fill text-primary me-2"></i> Inventario de Cursos y Disponibilidad de Cupos
+                </h5>
+                <p class="text-muted small mb-0">Gestión en tiempo real de vacantes, cierre rápido de matrículas y restablecimiento de cupos.</p>
+            </div>
+            <span class="badge bg-light text-secondary border">Total: {{ cursos.count }} programas</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light text-secondary small text-uppercase fw-bold">
+                    <tr>
+                        <th class="ps-4 py-3">Curso / Bootcamp</th>
+                        <th class="py-3">Área</th>
+                        <th class="py-3 text-center">Periodo</th>
+                        <th class="py-3 text-center">Cupos Disponibles</th>
+                        <th class="py-3 text-center" style="width: 13%;">Ocupación</th>
+                        <th class="py-3 text-end">Costo Matrícula</th>
+                        <th class="py-3 text-center">Estado</th>
+                        <th class="pe-4 py-3 text-center" style="min-width: 250px;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for c in cursos %}
+                        <tr>
+                            <td class="ps-4 py-3">
+                                <div class="fw-bold text-dark">{{ c.titulo }}</div>
+                                <div class="d-flex align-items-center gap-2 mt-1">
+                                    <span class="text-muted small">ID: #{{ c.id }}</span>
+                                    <span class="badge bg-light text-primary border" style="font-size: 0.7rem;">
+                                        <i class="bi bi-pc-display"></i> {{ c.cantidad_computadores }} PCs ({{ c.laboratorio }})
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="py-3">
+                                <span class="badge-area-pill" style="font-size: 0.72rem;">{{ c.area.nombre }}</span>
+                            </td>
+                            <td class="py-3 text-center text-muted small">
+                                {{ c.fecha_inicio|date:"d/m/Y" }} - {{ c.fecha_termino|date:"d/m/Y" }}
+                            </td>
+                            <td class="py-3 text-center">
+                                <span class="fw-bold fs-6 {% if c.cupos_disponibles == 0 %}text-danger{% elif c.cupos_disponibles <= 2 %}text-warning{% else %}text-success{% endif %}" id="cupos-curso-{{ c.id }}">
+                                    {{ c.cupos_disponibles }} / {{ c.cupos_maximos }}
+                                </span>
+                            </td>
+                            <td class="py-3 text-center">
+                                <div class="small fw-semibold mb-1">{{ c.porcentaje_ocupacion }}%</div>
+                                <div class="progress" style="height: 6px;">
+                                    <div class="progress-bar {% if c.porcentaje_ocupacion >= 90 %}bg-danger{% elif c.porcentaje_ocupacion >= 50 %}bg-warning{% else %}bg-success{% endif %}" {{ c.style_width }}></div>
+                                </div>
+                            </td>
+                            <td class="py-3 text-end fw-bold text-dark">
+                                {{ c.costo_clp }} CLP
+                            </td>
+                            <td class="py-3 text-center">
+                                {% if c.cupos_disponibles > 0 %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill small">
+                                        Activo
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill small">
+                                        Agotado
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <!-- COLUMNA DE ACCIONES SOLICITADA -->
+                            <td class="pe-4 py-3 text-center">
+                                <div class="d-flex justify-content-center gap-2">
+                                    <!-- Botón Cerrar Cupos / Agotar -->
+                                    <form method="POST" action="{% url 'cerrar_cupos_curso' c.id %}" class="d-inline" onsubmit="return confirm('¿Seguro que deseas agotar los cupos para {{ c.titulo }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" {% if c.cupos_disponibles == 0 %}disabled{% endif %} title="Setea cupos_disponibles = 0">
+                                            <i class="bi bi-slash-circle me-1"></i> Cerrar Cupos
+                                        </button>
+                                    </form>
+
+                                    <!-- Botón Restablecer Cupos -->
+                                    <form method="POST" action="{% url 'restablecer_cupos_curso' c.id %}" class="d-inline" onsubmit="return confirm('¿Restablecer los cupos de {{ c.titulo }} a {{ c.cupos_maximos }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Restaura cupos_disponibles = cupos_maximos">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Restablecer
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- SECCIÓN 2: ADMINISTRACIÓN DE MATRÍCULAS & CONTROL DE TRANSACCIONES -->
+    <div class="card card-custom border-0 shadow-sm overflow-hidden">
+        <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold text-dark mb-1">
+                    <i class="bi bi-arrow-repeat text-warning me-2"></i> Gestión de Matrículas & Control de Transacciones
+                </h5>
+                <p class="text-muted small mb-0">Al cancelar una matrícula pagada, los cupos se reponen automáticamente (+1 a cada curso incluido).</p>
+            </div>
+            <span class="badge bg-light text-secondary border">Total: {{ matriculas.count }} órdenes</span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light text-secondary small text-uppercase fw-bold">
+                    <tr>
+                        <th class="ps-4 py-3">Matrícula</th>
+                        <th class="py-3">Estudiante</th>
+                        <th class="py-3">Cursos Incluidos</th>
+                        <th class="py-3 text-end">Monto Total</th>
+                        <th class="py-3 text-center">Estado Actual</th>
+                        <th class="pe-4 py-3 text-center" style="min-width: 280px;">Modificar Estado / Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y">
+                    {% for m in matriculas %}
+                        <tr>
+                            <td class="ps-4 py-3">
+                                <span class="fw-bold text-dark">#{{ m.id|stringformat:"05d" }}</span>
+                                <div class="text-muted" style="font-size: 0.72rem;">{{ m.fecha_creacion|date:"d/m/Y H:i" }}</div>
+                            </td>
+                            <td class="py-3">
+                                <div class="fw-semibold text-dark">{{ m.estudiante.get_full_name|default:m.estudiante.username }}</div>
+                                <div class="text-muted small">{{ m.estudiante.email|default:m.estudiante.username }}</div>
+                            </td>
+                            <td class="py-3">
+                                <ul class="list-unstyled mb-0 small">
+                                    {% for det in m.detalles.all %}
+                                        <li><i class="bi bi-check2 text-primary me-1"></i>{{ det.curso.titulo }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                            <td class="py-3 text-end fw-bold text-dark">
+                                {{ m.total_clp }} CLP
+                            </td>
+                            <td class="py-3 text-center">
+                                {% if m.estado == 'PAGADO' %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">
+                                        PAGADO
+                                    </span>
+                                {% elif m.estado == 'CANCELADO' %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">
+                                        CANCELADO
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1 rounded-pill">
+                                        PENDIENTE
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="pe-4 py-3 text-center">
+                                <div class="d-flex align-items-center justify-content-center gap-2">
+                                    <!-- Formulario Selector de Cambio de Estado -->
+                                    <form method="POST" action="{% url 'cambiar_estado_web' m.id %}" class="d-inline-flex align-items-center gap-1">
+                                        {% csrf_token %}
+                                        <select name="nuevo_estado" class="form-select form-select-sm" style="width: 120px;" aria-label="Cambiar estado">
+                                            <option value="PAGADO" {% if m.estado == 'PAGADO' %}selected{% endif %}>PAGADO</option>
+                                            <option value="PENDIENTE" {% if m.estado == 'PENDIENTE' %}selected{% endif %}>PENDIENTE</option>
+                                            <option value="CANCELADO" {% if m.estado == 'CANCELADO' %}selected{% endif %}>CANCELADO</option>
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-outline-primary" title="Actualizar estado">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </form>
+
+                                    <!-- Botón Directo Cancelar Matrícula (con reposición automática de cupos) -->
+                                    {% if m.estado != 'CANCELADO' %}
+                                        <form method="POST" action="{% url 'cancelar_matricula_coordinador' m.id %}" class="d-inline" onsubmit="return confirm('¿Seguro que deseas cancelar la matrícula #{{ m.id|stringformat:'05d' }}? Se repondrán los cupos automáticamente.');">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-danger fw-semibold d-flex align-items-center gap-1" title="Cancela la matrícula y repone cupos">
+                                                <i class="bi bi-x-circle"></i>
+                                                <span>Cancelar</span>
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="badge bg-secondary-subtle text-secondary small px-2 py-1 rounded-pill">
+                                            <i class="bi bi-check-all me-1"></i> Cupos Repuestos
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4 text-muted">
+                                No existen matrículas registradas en la plataforma aún.
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- MODAL DE CREACIÓN DE CURSOS / BOOTCAMPS (EXCLUSIVO COORDINADOR) -->
+<div class="modal fade" id="modalNuevoCurso" tabindex="-1" aria-labelledby="modalNuevoCursoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 24px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white px-4 py-3 border-0">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="p-2 bg-primary text-white rounded-circle">
+                        <i class="bi bi-mortarboard-fill fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0 text-white" id="modalNuevoCursoLabel">
+                            + Abrir Nuevo Bootcamp / Curso
+                        </h5>
+                        <small class="text-white-50">Configura el programa académico, cupos y laboratorio con computadores</small>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+
+            <form method="POST" action="{% url 'crear_curso_coordinador' %}" id="form-nuevo-curso-panel">
+                {% csrf_token %}
+                <div class="modal-body p-4 bg-light-subtle">
+                    <div class="row g-3">
+                        <!-- Título del Curso -->
+                        <div class="col-12">
+                            <label for="input-panel-titulo" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-type-h1 text-primary me-1"></i> Título del Curso / Bootcamp <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control py-2" id="input-panel-titulo" name="titulo" placeholder="Ej: Bootcamp Cloud & DevOps Architecture" required>
+                        </div>
+
+                        <!-- Área de Conocimiento -->
+                        <div class="col-md-6">
+                            <label for="select-panel-area" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-folder-fill text-primary me-1"></i> Área de Conocimiento <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select py-2" id="select-panel-area" name="area" required>
+                                <option value="" disabled selected>Selecciona un área temática...</option>
+                                {% for a in areas %}
+                                    <option value="{{ a.id }}">{{ a.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Costo de Matrícula -->
+                        <div class="col-md-6">
+                            <label for="input-panel-costo" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-cash-stack text-success me-1"></i> Costo de Matrícula (CLP) <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white">$</span>
+                                <input type="number" class="form-control py-2" id="input-panel-costo" name="costo_matricula" placeholder="350000" min="0" step="1000" required>
+                                <span class="input-group-text bg-white">CLP</span>
+                            </div>
+                        </div>
+
+                        <!-- Selector de Plantilla / Presets de Sala -->
+                        <div class="col-12 bg-white p-3 rounded-3 border">
+                            <label for="select-preset-panel-laboratorio" class="form-label fw-bold small text-primary mb-1">
+                                <i class="bi bi-magic me-1"></i> Asistente de Salas & Capacidad de Computadores
+                            </label>
+                            <select class="form-select form-select-sm" id="select-preset-panel-laboratorio">
+                                <option value="" selected>-- Selecciona una sala típica o ingresa los datos a mano abajo --</option>
+                                <option value="Lab Desarrollo Web 101" data-pcs="15">Sala 101 - Lab Desarrollo Web (15 Computadores - Sala Pequeña)</option>
+                                <option value="Sala Taller Microcomputación 105" data-pcs="16">Sala 105 - Taller Microcomputación (16 Computadores - Taller Técnico)</option>
+                                <option value="Lab Ciberseguridad & SOC 202" data-pcs="18">Sala 202 - Lab Ciberseguridad & SOC (18 Computadores - Especializada)</option>
+                                <option value="Lab Redes & Telecomunicaciones 201" data-pcs="20">Sala 201 - Lab Redes & Telecomunicaciones (20 Computadores - Estándar)</option>
+                                <option value="Lab Cloud & DevSecOps 303" data-pcs="24">Sala 303 - Lab Cloud & DevSecOps (24 Computadores - Intermedia)</option>
+                                <option value="Lab Inteligencia Artificial 204" data-pcs="28">Sala 204 - Lab Inteligencia Artificial (28 Computadores - Gran Capacidad)</option>
+                                <option value="Lab Cómputo Avanzado & Cloud 301" data-pcs="32">Sala 301 - Lab Cómputo Avanzado & Big Data (32 Computadores - Servidores)</option>
+                                <option value="Auditorio Tecnológico 401" data-pcs="45">Sala 401 - Auditorio Tecnológico (45 Computadores - Auditorio)</option>
+                            </select>
+                            <small class="text-muted" style="font-size: 0.72rem;">
+                                Cada sala posee diferente cantidad de computadores (&lt; 20, 20 o &gt; 20 PCs), lo que condiciona de forma directa el tope máximo de cupos de la asignatura.
+                            </small>
+                        </div>
+
+                        <!-- Laboratorio Asignado -->
+                        <div class="col-md-6">
+                            <label for="input-panel-laboratorio" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-door-open-fill text-primary me-1"></i> Laboratorio Asignado <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control py-2" id="input-panel-laboratorio" name="laboratorio" placeholder="Ej: Lab Computación 201" value="Lab Desarrollo Web 101" required>
+                        </div>
+
+                        <!-- Cantidad de Computadores -->
+                        <div class="col-md-3">
+                            <label for="input-panel-computadores" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-pc-display text-info me-1"></i> Computadores (PCs) <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" class="form-control py-2" id="input-panel-computadores" name="cantidad_computadores" placeholder="15" min="1" value="15" required>
+                            <small class="text-muted d-block" style="font-size: 0.7rem;">Capacidad de la sala</small>
+                        </div>
+
+                        <!-- Cupos del Programa -->
+                        <div class="col-md-3">
+                            <label for="input-panel-cupos" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-people-fill text-warning me-1"></i> Cupos Vacantes <span class="text-danger">*</span>
+                            </label>
+                            <input type="number" class="form-control py-2" id="input-panel-cupos" name="cupos_maximos" placeholder="15" min="1" max="15" value="15" required>
+                            <small class="text-muted d-block" style="font-size: 0.7rem;">Tope: &le; PCs disponibles</small>
+                        </div>
+
+                        <!-- Indicador Dinámico de Coherencia Física -->
+                        <div class="col-12 mt-1">
+                            <div class="p-2 px-3 rounded-3 small border d-flex align-items-center gap-2" id="indicador-coherencia-panel">
+                                <i class="bi bi-info-circle-fill text-primary"></i>
+                                <span id="texto-coherencia-panel">Coherencia física: 1 computador por cada estudiante matriculado.</span>
+                            </div>
+                        </div>
+
+                        <!-- Fechas de Inicio y Término -->
+                        <div class="col-md-6">
+                            <label for="input-panel-fecha-inicio" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-calendar-event text-primary me-1"></i> Fecha de Inicio <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" class="form-control py-2" id="input-panel-fecha-inicio" name="fecha_inicio" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="input-panel-fecha-termino" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-flag-fill text-danger me-1"></i> Fecha de Término <span class="text-danger">*</span>
+                            </label>
+                            <input type="date" class="form-control py-2" id="input-panel-fecha-termino" name="fecha_termino" required>
+                        </div>
+
+                        <!-- Descripción breve -->
+                        <div class="col-12">
+                            <label for="textarea-panel-descripcion" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-card-text text-secondary me-1"></i> Descripción Breve <span class="text-danger">*</span>
+                            </label>
+                            <textarea class="form-control" id="textarea-panel-descripcion" name="descripcion" rows="3" placeholder="Resumen del programa, competencias técnicas y tecnologías a utilizar..." required></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light px-4 py-3 border-0">
+                    <button type="button" class="btn btn-outline-secondary px-4 py-2" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-primary-gradient px-4 py-2 fw-semibold shadow-sm" id="btn-submit-panel-publicar-curso">
+                        <i class="bi bi-cloud-arrow-up-fill me-1"></i> Publicar en Catálogo
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectPreset = document.getElementById('select-preset-panel-laboratorio');
+    const inputLab = document.getElementById('input-panel-laboratorio');
+    const inputPcs = document.getElementById('input-panel-computadores');
+    const inputCupos = document.getElementById('input-panel-cupos');
+    const indicador = document.getElementById('indicador-coherencia-panel');
+    const btnSubmit = document.getElementById('btn-submit-panel-publicar-curso');
+    const formPanelCurso = document.getElementById('form-nuevo-curso-panel');
+
+    function sincronizarCoherenciaFisicaPanel() {
+        if (!inputPcs || !inputCupos || !indicador) return;
+        const pcs = parseInt(inputPcs.value) || 0;
+        const cupos = parseInt(inputCupos.value) || 0;
+        inputCupos.max = pcs;
+
+        if (pcs <= 0) {
+            indicador.className = 'p-2 px-3 rounded-3 small border alert-danger text-danger d-flex align-items-center gap-2';
+            indicador.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> <span>La sala debe poseer al menos 1 computador.</span>';
+            if (btnSubmit) btnSubmit.disabled = true;
+            return;
+        }
+
+        if (cupos > pcs) {
+            indicador.className = 'p-2 px-3 rounded-3 small border alert-danger text-danger d-flex align-items-center gap-2';
+            indicador.innerHTML = `<i class="bi bi-x-circle-fill"></i> <span><strong>Incoherencia física:</strong> Hay ${cupos} cupos para solo ${pcs} computadores en la sala. Faltan ${cupos - pcs} computadores para cubrir la matrícula.</span>`;
+            inputCupos.classList.add('is-invalid');
+            inputCupos.classList.remove('is-valid');
+            if (btnSubmit) btnSubmit.disabled = true;
+        } else {
+            const libres = pcs - cupos;
+            indicador.className = 'p-2 px-3 rounded-3 small border alert-success text-success d-flex align-items-center gap-2';
+            indicador.innerHTML = `<i class="bi bi-check-circle-fill"></i> <span><strong>Coherencia de aula garantizada:</strong> ${cupos} cupos con 1 PC garantizado por alumno (${libres} computadores libres para el docente o respaldo).</span>`;
+            inputCupos.classList.remove('is-invalid');
+            inputCupos.classList.add('is-valid');
+            if (btnSubmit) btnSubmit.disabled = false;
+        }
+    }
+
+    if (selectPreset) {
+        selectPreset.addEventListener('change', function() {
+            if (this.value) {
+                inputLab.value = this.value;
+                const pcs = this.options[this.selectedIndex].getAttribute('data-pcs');
+                if (pcs) {
+                    inputPcs.value = pcs;
+                    if (parseInt(inputCupos.value) > parseInt(pcs) || !inputCupos.value || inputCupos.value === inputPcs.defaultValue) {
+                        inputCupos.value = pcs;
+                    }
+                }
+                sincronizarCoherenciaFisicaPanel();
+            }
+        });
+    }
+
+    if (inputPcs) inputPcs.addEventListener('input', sincronizarCoherenciaFisicaPanel);
+    if (inputCupos) inputCupos.addEventListener('input', sincronizarCoherenciaFisicaPanel);
+    sincronizarCoherenciaFisicaPanel();
+
+    if (formPanelCurso) {
+        formPanelCurso.addEventListener('submit', function(e) {
+            const pcs = parseInt(inputPcs.value) || 0;
+            const cupos = parseInt(inputCupos.value) || 0;
+            if (cupos > pcs) {
+                e.preventDefault();
+                alert(`No es posible publicar el curso: La cantidad de cupos (${cupos}) no puede superar los computadores (${pcs}) disponibles en el laboratorio.`);
+                return false;
+            }
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Publicando en Catálogo...';
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

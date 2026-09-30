@@ -1,0 +1,55 @@
+{% extends 'academico/base.html' %}
+
+{% block title %}404 - Página No Encontrada | EdTech{% endblock %}
+
+{% block content %}
+<div class="container py-5 text-center">
+    <div class="card card-custom p-5 border-0 shadow-lg mx-auto my-4" style="max-width: 650px; border-radius: 24px;">
+        <div class="mb-4">
+            <span class="display-1 fw-bold" style="background: linear-gradient(135deg, #ef4444 0%, #f97316 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">
+                404
+            </span>
+            <div class="p-3 bg-light rounded-circle d-inline-flex mx-auto mb-2" style="width: 80px; height: 80px; align-items: center; justify-content: center;">
+                <i class="bi bi-compass text-danger fs-1"></i>
+            </div>
+        </div>
+
+        <h2 class="fw-bold text-dark mb-2">Error 404: Página no encontrada</h2>
+        <p class="text-muted mb-4">
+            La URL <code class="text-danger fw-bold bg-danger-subtle px-2 py-1 rounded">{{ path }}</code> no existe en el servidor.
+        </p>
+
+        <!-- Información Académica del Alumno Requerida -->
+        <div class="p-3 bg-light rounded-4 border text-start mb-4">
+            <div class="small fw-bold text-secondary mb-2">
+                <i class="bi bi-info-circle-fill text-primary me-1"></i> Registro de Diagnóstico y Evaluación
+            </div>
+            <div class="row g-2 small">
+                <div class="col-sm-6">
+                    <span class="text-muted">Alumno:</span>
+                    <strong class="text-dark d-block">Fernando Pailahueque</strong>
+                </div>
+                <div class="col-sm-3">
+                    <span class="text-muted">Sección:</span>
+                    <strong class="text-dark d-block">AP-N4-C2</strong>
+                </div>
+                <div class="col-sm-3">
+                    <span class="text-muted">Año:</span>
+                    <strong class="text-dark d-block">2026</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-center gap-3">
+            <a href="{% url 'catalogo' %}" class="btn btn-primary-gradient px-4 py-2">
+                <i class="bi bi-house-door-fill me-1"></i> Volver al Catálogo
+            </a>
+            {% if request.user.is_authenticated and request.user.role == 'COORDINADOR' %}
+            <a href="/api/docs/" class="btn btn-outline-primary">
+                <i class="bi bi-code-slash"></i> Ver API Swagger
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

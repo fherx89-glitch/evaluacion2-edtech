@@ -1,0 +1,162 @@
+{% extends 'academico/base.html' %}
+{% load humanize %}
+{% load moneda_tags %}
+
+{% block title %}Mi Carro de Matrícula | EdTech{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Encabezado de la Sección -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+        <div>
+            <h2 class="fw-bold text-dark mb-1">
+                <i class="bi bi-cart3 text-primary me-2"></i> Mi Carro de Matrícula
+            </h2>
+            <p class="text-muted small mb-0">Revisa tus cursos seleccionados y formaliza tu reserva académica.</p>
+        </div>
+        <div class="mt-2 mt-sm-0">
+            <a href="{% url 'catalogo' %}" class="btn btn-outline-custom py-2 px-3 small">
+                <i class="bi bi-plus-circle me-1"></i> Explorar Más Cursos
+            </a>
+        </div>
+    </div>
+
+    {% if items %}
+        <div class="row g-4">
+            
+            <!-- Listado de Cursos en Tabla -->
+            <div class="col-lg-8">
+                <div class="card card-custom border-0 shadow-sm overflow-hidden">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="bg-light text-secondary small text-uppercase fw-bold">
+                                <tr>
+                                    <th scope="col" class="ps-4 py-3">Curso / Programa</th>
+                                    <th scope="col" class="py-3 text-center">Cupos Actuales</th>
+                                    <th scope="col" class="py-3 text-end">Costo Matrícula</th>
+                                    <th scope="col" class="pe-4 py-3 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                {% for item in items %}
+                                    <tr id="cart-item-row-{{ item.id }}">
+                                        <td class="ps-4 py-3">
+                                            <div class="d-flex flex-column">
+                                                <span class="badge-area-pill align-self-start mb-1" style="font-size: 0.68rem;">
+                                                    {{ item.curso.area.nombre }}
+                                                </span>
+                                                <span class="fw-bold text-dark fs-6">{{ item.curso.titulo }}</span>
+                                                <span class="text-muted small">
+                                                    <i class="bi bi-calendar3 me-1"></i> {{ item.curso.fecha_inicio|date:"d M Y" }} al {{ item.curso.fecha_termino|date:"d M Y" }}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td class="py-3 text-center">
+                                            {% if item.curso.tiene_cupos %}
+                                                <span class="badge badge-cupo-disponible px-2 py-1 rounded-pill small">
+                                                    {{ item.curso.cupos_disponibles }} disponibles
+                                                </span>
+                                            {% else %}
+                                                <span class="badge badge-cupo-agotado px-2 py-1 rounded-pill small">
+                                                    ¡Sin cupos!
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="py-3 text-end fw-bold text-dark fs-6">
+                                            {{ item.curso.costo_clp }} CLP
+                                        </td>
+                                        <td class="pe-4 py-3 text-center">
+                                            <a href="{% url 'eliminar_carro' item.id %}" class="btn btn-sm btn-outline-danger rounded-circle p-2" title="Eliminar del carro" id="btn-remove-item-{{ item.id }}">
+                                                <i class="bi bi-trash-fill"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pie de la Tabla con Opción de Vaciar -->
+                    <div class="p-3 bg-light d-flex justify-content-between align-items-center border-top">
+                        <span class="small text-muted">
+                            <i class="bi bi-info-circle me-1"></i> Total de ítems: <strong>{{ items.count }}</strong>
+                        </span>
+                        <a href="{% url 'vaciar_carro' %}" class="btn btn-sm btn-outline-secondary" onclick="return confirm('¿Seguro que deseas vaciar tu carro?');" id="btn-vaciar-carro">
+                            <i class="bi bi-trash me-1"></i> Vaciar Carro
+                        </a>
+                    </div>
+                </div>
+
+                {% if alguno_sin_cupo %}
+                    <div class="alert alert-warning mt-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                        <div>
+                            <strong>Atención:</strong> Uno o más cursos en tu carro ya no poseen cupos disponibles. Por favor elimínalos para continuar con el checkout.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Resumen de Pago y Checkout -->
+            <div class="col-lg-4">
+                <div class="card card-custom p-4 border-0 shadow-sm sticky-top" style="top: 90px;">
+                    <h5 class="fw-bold text-dark mb-3 pb-2 border-bottom">Resumen de Matrícula</h5>
+
+                    <div class="d-flex justify-content-between mb-2 small">
+                        <span class="text-muted">Cursos seleccionados:</span>
+                        <span class="fw-semibold text-dark">{{ items.count }}</span>
+                    </div>
+
+                    <div class="d-flex justify-content-between mb-3 small">
+                        <span class="text-muted">Descuento aplicado:</span>
+                        <span class="fw-semibold text-success">$0 CLP</span>
+                    </div>
+
+                    <div class="p-3 bg-light rounded-3 mb-4 border">
+                        <div class="d-flex justify-content-between align-items-baseline">
+                            <span class="fw-bold text-dark">Total a Pagar:</span>
+                            <div class="text-end">
+                                <span class="fs-3 fw-bold text-primary" id="total-pago-text">{{ carro.total_clp }}</span>
+                                <span class="small text-muted d-block" style="font-size: 0.72rem;">(CLP)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botón Formulario Checkout Atómico -->
+                    <form method="POST" action="{% url 'checkout_web' %}" id="checkout-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-primary-gradient w-100 py-3 fs-6 fw-bold mb-3 d-flex align-items-center justify-content-center gap-2 shadow" id="btn-confirmar-matricula" {% if alguno_sin_cupo %}disabled{% endif %}>
+                            <i class="bi bi-lock-fill"></i> Confirmar y Pagar Matrícula
+                        </button>
+                    </form>
+
+                    <div class="small text-muted text-center" style="font-size: 0.78rem;">
+                        <i class="bi bi-shield-check text-success me-1"></i>
+                        <strong>Garantía Transaccional:</strong> Operación atómica en PostgreSQL. Los cupos se descuentan al instante de formalizar.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    {% else %}
+        <!-- Estado Vacío -->
+        <div class="text-center py-5">
+            <div class="card card-custom p-5 border-0 shadow-sm mx-auto" style="max-width: 500px;">
+                <div class="p-4 rounded-circle bg-light d-inline-flex align-items-center justify-content-center mx-auto mb-3" style="width: 90px; height: 90px;">
+                    <i class="bi bi-cart-x text-muted" style="font-size: 3rem;"></i>
+                </div>
+                <h3 class="fw-bold text-dark mb-2">Tu carro está vacío</h3>
+                <p class="text-muted small mb-4">Aún no has añadido ningún curso o bootcamp a tu selección académica.</p>
+                <div>
+                    <a href="{% url 'catalogo' %}" class="btn btn-primary-gradient px-4 py-2" id="btn-ir-al-catalogo">
+                        <i class="bi bi-grid-fill me-1"></i> Ver Catálogo de Cursos
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+
+</div>
+{% endblock %}

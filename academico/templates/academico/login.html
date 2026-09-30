@@ -1,0 +1,105 @@
+{% extends 'academico/base.html' %}
+
+{% block title %}Iniciar Sesión | Portal EdTech{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            
+            <!-- Tarjeta Principal de Login -->
+            <div class="card card-custom p-4 p-md-5 border-0 shadow-lg" style="border-radius: 24px;">
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-3" style="background: linear-gradient(135deg, #4338ca 0%, #3b82f6 100%); width: 70px; height: 70px; box-shadow: 0 10px 20px rgba(67, 56, 202, 0.3);">
+                        <i class="bi bi-person-badge-fill text-white fs-2"></i>
+                    </div>
+                    <h2 class="fw-bold text-dark mb-1">Acceso Académico</h2>
+                    <p class="text-muted small">Plataforma de Reservas de Cursos y Bootcamps</p>
+                </div>
+
+                <form method="POST" action="{% url 'login' %}" id="login-form">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="username" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-person me-1"></i> Nombre de Usuario
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 py-2" id="username" name="username" placeholder="ej: estudiante_1" required autofocus>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="password" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-shield-lock me-1"></i> Contraseña
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock-fill"></i></span>
+                            <input type="password" class="form-control bg-light border-start-0 py-2" id="password" name="password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary-gradient w-100 py-2 fs-6 fw-bold mb-3 d-flex align-items-center justify-content-center gap-2" id="btn-submit-login">
+                        <i class="bi bi-box-arrow-in-right"></i> Ingresar a la Plataforma
+                    </button>
+                </form>
+
+                <div class="text-center my-3">
+                    <span class="text-muted small">¿No tienes cuenta? </span>
+                    <a href="{% url 'registro_estudiante' %}" class="fw-semibold text-primary text-decoration-none small" id="link-registro-estudiante">
+                        Registrarse como Nuevo Estudiante
+                    </a>
+                </div>
+
+                <!-- Cuadro de Credenciales de Prueba para Evaluación -->
+                <div class="p-3 bg-light rounded-4 border mt-2">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="small fw-bold text-dark">
+                            <i class="bi bi-key-fill text-warning me-1"></i> Credenciales de Prueba
+                        </span>
+                        <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.65rem;">Sembradas</span>
+                    </div>
+
+                    <div class="d-flex flex-column gap-2">
+                        <!-- Botón Rápido Estudiante -->
+                        <button type="button" class="btn btn-sm btn-outline-primary text-start d-flex justify-content-between align-items-center py-2 px-3 rounded-3" onclick="autofill('estudiante_1', 'Est2026!')">
+                            <div>
+                                <div class="fw-semibold small"><i class="bi bi-backpack me-1"></i> Estudiante</div>
+                                <div class="text-muted" style="font-size: 0.72rem;">Usuario: estudiante_1</div>
+                            </div>
+                            <span class="badge bg-primary rounded-pill">Cargar</span>
+                        </button>
+
+                        <!-- Botón Rápido Coordinador -->
+                        <button type="button" class="btn btn-sm btn-outline-warning text-dark text-start d-flex justify-content-between align-items-center py-2 px-3 rounded-3" onclick="autofill('coordinador_admin', 'Coord2026!')">
+                            <div>
+                                <div class="fw-semibold small"><i class="bi bi-shield-check me-1"></i> Coordinador</div>
+                                <div class="text-muted" style="font-size: 0.72rem;">Usuario: coordinador_admin</div>
+                            </div>
+                            <span class="badge bg-warning text-dark rounded-pill">Cargar</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center mt-4">
+                    <a href="{% url 'catalogo' %}" class="small text-muted text-decoration-none hover-primary">
+                        <i class="bi bi-arrow-left me-1"></i> Continuar navegando como visitante
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function autofill(usuario, clave) {
+        document.getElementById('username').value = usuario;
+        document.getElementById('password').value = clave;
+    }
+</script>
+{% endblock %}

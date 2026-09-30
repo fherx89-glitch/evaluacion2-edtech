@@ -1,0 +1,110 @@
+{% extends 'academico/base.html' %}
+
+{% block title %}Registro de Estudiante | Portal EdTech{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-7 col-lg-6">
+            
+            <!-- Tarjeta Principal de Registro -->
+            <div class="card card-custom p-4 p-md-5 border-0 shadow-lg" style="background-color: #ffffff; border-radius: 24px;">
+                <div class="text-center mb-4">
+                    <div class="d-inline-flex align-items-center justify-content-center p-3 rounded-circle mb-3" style="background: linear-gradient(135deg, var(--btn-primary-bg, #059669) 0%, var(--primary-accent, #10b981) 100%); width: 70px; height: 70px; box-shadow: 0 10px 20px rgba(5, 150, 105, 0.25);">
+                        <i class="bi bi-person-plus-fill text-white fs-2"></i>
+                    </div>
+                    <h2 class="fw-bold text-dark mb-1">Registro de Estudiante</h2>
+                    <p class="text-muted small mb-2">Crea tu cuenta oficial para matricularte en Bootcamps y Cursos</p>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-1 rounded-pill small">
+                        <i class="bi bi-shield-check me-1"></i> Rol Asignado: Estudiante
+                    </span>
+                </div>
+
+                <!-- ¿Por qué un formulario dedicado sin selector de roles?:
+                     Aquí utilicé un formulario donde no existe ningún campo de selección de rol (como un <select> de Coordinador),
+                     para evitar vulnerabilidades de elevación de privilegios (Mass Assignment). El backend fuerza
+                     incondicionalmente el rol ESTUDIANTE, garantizando que todo usuario autorregistrado solo adquiera permisos básicos. -->
+                <form method="POST" action="{% url 'registro_estudiante' %}" id="registro-form">
+                    {% csrf_token %}
+                    
+                    <!-- Campo: Usuario -->
+                    <div class="mb-3">
+                        <label for="reg-username" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-person me-1"></i> Nombre de Usuario <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-at"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 py-2" id="reg-username" name="username" value="{{ username|default:'' }}" placeholder="ej: nuevo_alumno" required autofocus>
+                        </div>
+                    </div>
+
+                    <!-- Campo: Nombre Completo -->
+                    <div class="mb-3">
+                        <label for="reg-nombre" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-card-text me-1"></i> Nombre Completo <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-person-fill"></i></span>
+                            <input type="text" class="form-control bg-light border-start-0 py-2" id="reg-nombre" name="nombre_completo" value="{{ nombre_completo|default:'' }}" placeholder="ej: Juan Pérez" required>
+                        </div>
+                    </div>
+
+                    <!-- Campo: Correo Electrónico -->
+                    <div class="mb-3">
+                        <label for="reg-email" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-envelope me-1"></i> Correo Electrónico <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-envelope-fill"></i></span>
+                            <input type="email" class="form-control bg-light border-start-0 py-2" id="reg-email" name="email" value="{{ email|default:'' }}" placeholder="ej: estudiante@edtech.cl" required>
+                        </div>
+                    </div>
+
+                    <!-- Campo: Contraseña -->
+                    <div class="mb-3">
+                        <label for="reg-password" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-lock me-1"></i> Contraseña <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-lock-fill"></i></span>
+                            <input type="password" class="form-control bg-light border-start-0 py-2" id="reg-password" name="password" placeholder="Mínimo 4 caracteres" minlength="4" required>
+                        </div>
+                    </div>
+
+                    <!-- Campo: Confirmar Contraseña -->
+                    <div class="mb-4">
+                        <label for="reg-confirm-password" class="form-label small fw-bold text-secondary">
+                            <i class="bi bi-shield-lock me-1"></i> Confirmar Contraseña <span class="text-danger">*</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 text-muted"><i class="bi bi-check-circle-fill"></i></span>
+                            <input type="password" class="form-control bg-light border-start-0 py-2" id="reg-confirm-password" name="confirm_password" placeholder="Repite tu contraseña" minlength="4" required>
+                        </div>
+                    </div>
+
+                    <!-- Botón Registrarse -->
+                    <button type="submit" class="btn btn-primary-gradient w-100 py-2 fs-6 fw-bold mb-3 d-flex align-items-center justify-content-center gap-2" id="btn-submit-registro">
+                        <i class="bi bi-person-check-fill"></i> Registrarse
+                    </button>
+                </form>
+
+                <!-- Enlace Volver a Login -->
+                <div class="text-center my-2">
+                    <span class="text-muted small">¿Ya tienes cuenta? </span>
+                    <a href="{% url 'login' %}" class="fw-semibold text-primary text-decoration-none small" id="link-volver-login">
+                        Iniciar Sesión
+                    </a>
+                </div>
+
+                <div class="text-center mt-3 pt-2 border-top">
+                    <a href="{% url 'catalogo' %}" class="small text-muted text-decoration-none hover-primary">
+                        <i class="bi bi-arrow-left me-1"></i> Continuar navegando como visitante
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
