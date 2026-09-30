@@ -71,7 +71,7 @@
     {% if matriculas %}
         <div class="d-flex flex-column gap-4">
             {% for m in matriculas %}
-                <div class="card card-custom border-0 shadow-sm overflow-hidden" id="matricula-card-{{ m.id }}">
+                <div class="card card-custom border-0 shadow-sm" id="matricula-card-{{ m.id }}">
                     
                     <!-- Encabezado de la Matrícula -->
                     <div class="p-4 bg-light border-bottom d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -86,13 +86,24 @@
                         </div>
 
                         <div class="d-flex align-items-center gap-3">
+                            <!-- Botón Solicitar Retracto / Anular -->
+                            {% if m.estado == 'PAGADO' and m.permite_retracto %}
+                                <button type="button" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalRetracto-{{ m.id }}">
+                                    <i class="bi bi-arrow-counterclockwise"></i> Solicitar Retracto / Anular
+                                </button>
+                            {% endif %}
+
                             <!-- Estado de la matrícula -->
                             {% if m.estado == 'PAGADO' %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2 fs-6 rounded-pill">
                                     <i class="bi bi-check-circle-fill me-1"></i> PAGADO
                                 </span>
-                            {% elif m.estado == 'CANCELADO' %}
+                            {% elif m.estado == 'ANULADA' %}
                                 <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2 fs-6 rounded-pill">
+                                    <i class="bi bi-slash-circle-fill me-1"></i> ANULADA
+                                </span>
+                            {% elif m.estado == 'CANCELADO' %}
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2 fs-6 rounded-pill">
                                     <i class="bi bi-x-circle-fill me-1"></i> CANCELADO
                                 </span>
                             {% else %}
@@ -104,13 +115,25 @@
                             <!-- Monto Total -->
                             <div class="text-end">
                                 <div class="text-muted small" style="font-size: 0.72rem;">TOTAL ABONADO</div>
-                                <div class="fs-4 fw-bold text-primary">{{ m.total_clp }} CLP</div>
+                                <div class="fs-4 fw-bold {% if m.estado == 'ANULADA' or m.estado == 'CANCELADO' %}text-muted text-decoration-line-through{% else %}text-primary{% endif %}">{{ m.total_clp }} CLP</div>
                             </div>
                         </div>
                     </div>
 
                     <!-- Detalle de Cursos Matriculados -->
-                    <div class="p-4">
+                    <div class="p-4 bg-white">
+                        <!-- Recuadro de Aviso Institucional para Matrículas Anuladas -->
+                        {% if m.estado == 'ANULADA' %}
+                            {% with matricula=m %}
+                            <div class="alert alert-secondary border bg-light d-flex align-items-center gap-2 mb-3 py-2 px-3 rounded text-muted small">
+                                <i class="bi bi-info-circle-fill text-danger fs-5 flex-shrink-0"></i>
+                                <div>
+                                    Matrícula Anulada el {{ matricula.fecha_anulacion|date:'d/m/Y H:i' }} hrs. Motivo: {{ matricula.motivo_anulacion }}
+                                </div>
+                            </div>
+                            {% endwith %}
+                        {% endif %}
+
                         <h6 class="small text-uppercase fw-bold text-muted mb-3">
                             <i class="bi bi-mortarboard me-1"></i> Programas Incluidos en esta Matrícula:
                         </h6>
@@ -148,6 +171,47 @@
                     </div>
 
                 </div>
+
+                {# ¿Por qué el modal se ubica fuera de la tarjeta y con identificador dinámico modalRetracto-{{ m.id }}?: #}
+                {# 1. Prevención de conflictos de apilamiento (z-index y overflow): Colocar el modal fuera de .card #}
+                {#    evita que el fondo oscuro (.modal-backdrop) de Bootstrap atrape el diálogo y bloquee los clics. #}
+                {# 2. Identificador único por orden: modalRetracto-{{ m.id }} asegura que cada botón abra su propia #}
+                {#    orden de matrícula con su formulario independiente apuntando a 'anular_matricula_estudiante'. #}
+                {% if m.estado == 'PAGADO' and m.permite_retracto %}
+                <div class="modal fade" id="modalRetracto-{{ m.id }}" tabindex="-1" aria-labelledby="modalRetractoLabel-{{ m.id }}" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow">
+                            <div class="modal-header bg-danger text-white">
+                                <h5 class="modal-title fw-bold fs-6" id="modalRetractoLabel-{{ m.id }}">
+                                    <i class="bi bi-exclamation-triangle-fill me-2"></i> Confirmar Retracto de Matrícula
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <form method="POST" action="{% url 'anular_matricula_estudiante' m.id %}">
+                                {% csrf_token %}
+                                <div class="modal-body p-4 text-start">
+                                    <p class="mb-3 text-dark">
+                                        ¿Estás seguro de que deseas ejercer tu derecho de retracto para la <strong>Orden de Matrícula #{{ m.id|stringformat:"05d" }}</strong> por un total de <strong>{{ m.total_clp }} CLP</strong>?
+                                    </p>
+                                    <div class="alert alert-warning border-0 small mb-3">
+                                        <i class="bi bi-info-circle-fill me-1"></i>
+                                        Esta acción cambiará el estado a <strong>ANULADA</strong> y liberará de inmediato tus cupos en los programas formativos antes del inicio de clases.
+                                    </div>
+                                    <div class="text-muted small">
+                                        <strong>Inicio del programa más próximo:</strong> {{ m.fecha_inicio_proxima|date:"d/m/Y"|default:"Próximamente" }}.
+                                    </div>
+                                </div>
+                                <div class="modal-footer bg-light border-top-0">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-x-circle"></i> Confirmar Retracto / Anulación
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
             {% endfor %}
         </div>
     {% else %}

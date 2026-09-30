@@ -363,15 +363,20 @@ class ItemCarro(models.Model):
 # ==============================================================================
 class Matricula(models.Model):
     """
-    Orden de matrícula formal. Permite los estados PENDIENTE, PAGADO y CANCELADO.
+    Orden de matrícula formal. Permite los estados PAGADO y ANULADA.
     """
-    ESTADO_PENDIENTE = 'PENDIENTE'
     ESTADO_PAGADO = 'PAGADO'
+    ESTADO_ANULADA = 'ANULADA'
+    ESTADO_PENDIENTE = 'PENDIENTE'
     ESTADO_CANCELADO = 'CANCELADO'
 
-    ESTADOS_CHOICES = [
+    ESTADOS = [
+        ('PAGADO', 'Pagado'),
+        ('ANULADA', 'Anulada'),
+    ]
+
+    ESTADOS_CHOICES = ESTADOS + [
         (ESTADO_PENDIENTE, 'Pendiente'),
-        (ESTADO_PAGADO, 'Pagado'),
         (ESTADO_CANCELADO, 'Cancelado'),
     ]
 
@@ -383,7 +388,7 @@ class Matricula(models.Model):
     )
     estado = models.CharField(
         max_length=20,
-        choices=ESTADOS_CHOICES,
+        choices=ESTADOS,
         default=ESTADO_PAGADO,
         verbose_name='Estado de la Matrícula'
     )
@@ -396,6 +401,30 @@ class Matricula(models.Model):
     fecha_creacion = models.DateTimeField(
         auto_now_add=True,
         verbose_name='Fecha de Creación'
+    )
+
+    # ¿Por qué campos de auditoría (motivo_anulacion, fecha_anulacion, anulado_por)?:
+    # Toda anulación formal (sea por derecho legal de retracto del estudiante o cancelación administrativa
+    # por parte de coordinación) debe ser plenamente trazable para efectos financieros y académicos.
+    # Guardamos la marca temporal exacta, el motivo formal y la referencia al usuario responsable (SET_NULL
+    # para que si un usuario directivo es eliminado, el registro histórico de la orden permanezca intacto).
+    motivo_anulacion = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Motivo de Anulación'
+    )
+    fecha_anulacion = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name='Fecha de Anulación'
+    )
+    anulado_por = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='matriculas_anuladas',
+        verbose_name='Anulado por'
     )
 
     class Meta:
@@ -416,6 +445,35 @@ class Matricula(models.Model):
     def total_clp(self):
         """Formatea el total de la matrícula en pesos chilenos sin decimales: $XXX.XXX"""
         return f"${int(round(float(self.total))):,}".replace(",", ".")
+
+    # ¿Por qué la propiedad permite_retracto?:
+    # Implementa la regla de negocio y normativa de retracto educacional: el estudiante solo puede solicitar
+    # la restitución voluntaria si las clases aún no han comenzado (hoy < fecha_inicio del curso más próximo).
+    # Al exponerlo como propiedad de modelo, se centraliza la regla tanto para vistas como para templates.
+    @property
+    def permite_retracto(self):
+        """
+        Retorna True si la matrícula está en estado PAGADO y la fecha actual es anterior
+        a la fecha de inicio del curso (o del curso más próximo en la orden).
+        """
+        if self.estado != self.ESTADO_PAGADO:
+            return False
+        from django.utils import timezone
+        hoy = timezone.now().date()
+        fechas = [det.curso.fecha_inicio for det in self.detalles.all() if det.curso and det.curso.fecha_inicio]
+        if not fechas:
+            return True
+        return hoy < min(fechas)
+
+    # ¿Por qué la propiedad fecha_inicio_proxima?:
+    # Permite determinar dinámicamente cuál es el curso que comienza primero dentro de los programas
+    # incluidos en la orden. Esto se utiliza tanto para informar con exactitud la fecha límite en el modal
+    # de retracto del estudiante como para validar en el backend si el plazo de retracto sigue vigente.
+    @property
+    def fecha_inicio_proxima(self):
+        """Retorna la fecha de inicio del curso más próximo en la orden de matrícula."""
+        fechas = [det.curso.fecha_inicio for det in self.detalles.all() if det.curso and det.curso.fecha_inicio]
+        return min(fechas) if fechas else None
 
 
 # ==============================================================================

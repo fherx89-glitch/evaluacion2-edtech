@@ -259,13 +259,21 @@ class CheckoutSerializer(serializers.Serializer):
 
 # ==============================================================================
 # SERIALIZADOR DE CAMBIO DE ESTADO (Para Coordinadores)
+# ¿Por qué serializers.ChoiceField con estados extendidos?:
+# Al definir 'estado' explícitamente en el serializador con las 4 constantes (PENDIENTE, PAGADO, CANCELADO, ANULADA),
+# desacoplamos la validación de la API del choices del modelo, garantizando interoperabilidad
+# retrocompatible con endpoints que administran estados históricos y la nueva opción ANULADA.
 # ==============================================================================
 class CambiarEstadoMatriculaSerializer(serializers.ModelSerializer):
+    estado = serializers.ChoiceField(
+        choices=[Matricula.ESTADO_PENDIENTE, Matricula.ESTADO_PAGADO, Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA]
+    )
+
     class Meta:
         model = Matricula
         fields = ['estado']
 
     def validate_estado(self, value):
-        if value not in [Matricula.ESTADO_PENDIENTE, Matricula.ESTADO_PAGADO, Matricula.ESTADO_CANCELADO]:
-            raise serializers.ValidationError("Estado no válido. Opciones: PENDIENTE, PAGADO, CANCELADO.")
+        if value not in [Matricula.ESTADO_PENDIENTE, Matricula.ESTADO_PAGADO, Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA]:
+            raise serializers.ValidationError("Estado no válido. Opciones: PENDIENTE, PAGADO, CANCELADO, ANULADA.")
         return value

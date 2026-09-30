@@ -102,4 +102,58 @@
   > "Implementa la vista personalizada `custom_404_view` y su plantilla `404.html`. Si la petición entrante solicita una ruta de API (`/api/`) o encabezado `application/json`, retorna una respuesta JSON estructurada con código 404; si proviene del navegador web, renderiza una interfaz amigable que preserve la barra de navegación, el fondo institucional y el footer obligatorio con los datos del alumno: `Fernando Pailahueque | AP-N4-C2 | 2026`."
 
 ---
+
+## 6. Ciclo de Vida, Retracto Legal y Auditoría Completa de Matrículas
+*Prompts para la anulación formal de matrículas, derecho de retracto voluntario del estudiante, anulación administrativa por coordinación, reposición atómica de cupos y auditoría de cambios.*
+
+### Prompts de Instrucción y Ciclo de Vida:
+* **Prompt 6.1 (Modelado de Estados de Matrícula y Campos de Auditoría):**
+  > "En el modelo `Matricula`, define las opciones de estado: `ESTADOS = [('PAGADO', 'Pagado'), ('ANULADA', 'Anulada')]`. Incorpora los campos de auditoría: `motivo_anulacion` (TextField opcional), `fecha_anulacion` (DateTimeField opcional) y `anulado_por` (`ForeignKey(CustomUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='matriculas_anuladas')`). Añade propiedades de conveniencia `permite_retracto` y `fecha_inicio_proxima` para validar si la fecha actual es anterior a la fecha de inicio del curso más próximo en la orden."
+
+* **Prompt 6.2 (Control Transaccional y Reposición Atómica de Cupos):**
+  > "1. Desarrolla la vista `anular_matricula_estudiante(request, matricula_id)` protegida con `@login_required`: valida que la matrícula pertenezca a `request.user` y se encuentre en estado `PAGADO`. Valida el plazo legal de retracto: solo permite la anulación si la fecha actual es anterior a la fecha de inicio del programa (o del curso más próximo en la orden); si ya inició, deniega con un mensaje de error informativo. Ejecuta dentro de un bloque `with transaction.atomic():` el cambio de estado a `ANULADA`, `fecha_anulacion = timezone.now()`, `motivo_anulacion = 'Retracto voluntario ejercido por el estudiante'`, `anulado_por = request.user`, y la reposición segura de +1 cupo disponible por cada curso involucrado (cuidando no exceder `cupos_maximos`).
+  > 2. Desarrolla la vista `anular_matricula_coordinador(request, matricula_id)` protegida para usuarios con rol `COORDINADOR` o staff: recibe vía POST el campo obligatorio `motivo`. Ejecuta en `with transaction.atomic():` el cambio a `ANULADA`, la restitución atómica de cupos y el registro de fecha, motivo y `anulado_por = request.user`."
+
+* **Prompt 6.3 (Mapeo de Rutas Web):**
+  > "En `academico/urls.py`, registra las rutas:
+  > - `path('matricula/<int:matricula_id>/anular/', anular_matricula_estudiante, name='anular_matricula_estudiante')`
+  > - `path('coordinador/matricula/<int:matricula_id>/anular/', anular_matricula_coordinador, name='anular_matricula_coordinador')`"
+
+* **Prompt 6.4 (Interfaz de Estudiante y Aviso Institucional de Anulación):**
+  > "En `mis_matriculas.html`:
+  > - Para órdenes con estado `PAGADO` con plazo de retracto vigente, despliega el botón secundario 'Solicitar Retracto / Anular' con un modal de confirmación claro y detallado.
+  > - Para matrículas en estado `ANULADA`, muestra la insignia `ANULADA` y renderiza el recuadro de aviso institucional indicando textualmente:
+  >   `'Matrícula Anulada el {{ matricula.fecha_anulacion|date:'d/m/Y H:i' }} hrs. Motivo: {{ matricula.motivo_anulacion }}'`.
+  > - Excluye los montos de matrículas anuladas del cálculo del resumen superior 'Inversión Total (Pagado)'."
+
+* **Prompt 6.5 (Interfaz del Panel de Coordinación):**
+  > "En `panel_coordinador.html`, añade en la tabla de órdenes de matrícula la opción 'Anular Matrícula', la cual abre un modal interactivo que solicita obligatoriamente el motivo de la anulación antes de enviar la petición POST a `anular_matricula_coordinador`."
+
+* **Prompt 6.6 (Resolución de Conflicto de Superposición y Backdrop en Modal de Retracto del Estudiante):**
+  > "Corrige el modal de retracto en `academico/templates/academico/mis_matriculas.html` y su envío transaccional:
+  > 1. Problema detectado: Se visualizaban dos modales superpuestos simultáneamente (título y textos montados/duplicados) y al pulsar 'Confirmar Retracto / Anulación' no se enviaba la petición ni se ejecutaba la acción.
+  > 2. Solución en `mis_matriculas.html`:
+  >    - Asignar identificadores dinámicos y únicos para cada modal por matrícula: botón con `data-bs-toggle="modal" data-bs-target="#modalRetracto-{{ m.id }}"` y contenedor `<div class="modal fade" id="modalRetracto-{{ m.id }}" ...>`.
+  >    - Asegurar que no existan modales duplicados en el HTML (un solo modal por matrícula dentro o fuera del ciclo).
+  >    - Verificar la estructura limpia del formulario dentro del modal: `<form method="POST" action="{% url 'anular_matricula_estudiante' m.id %}">` con `{% csrf_token %}` y botón de envío `<button type="submit" class="btn btn-danger">Confirmar Retracto / Anulación</button>`.
+  >    - Aislar el modal fuera de los contenedores `.card` para evitar que estilos con `overflow: hidden` o `z-index` conflictivo provoquen que el fondo oscuro de Bootstrap (`.modal-backdrop`) bloquee o intercepte los clics del usuario."
+
+* **Prompt 6.7 (Corrección de Foster-Parenting del DOM y Desbloqueo de Modal de Anulación Administrativa del Coordinador):**
+  > "Corrige de inmediato el modal de anulación administrativa en `academico/templates/academico/panel_coordinador.html` y `coordinador.html`:
+  > 1. Diagnóstico del fallo: El modal de anulación se encontraba duplicado en el DOM (se apreciaban dos modales superpuestos simultáneamente con textos y botones montados). Los clics en el textarea y en 'Confirmar Anulación' quedaban interceptados por la superposición de elementos.
+  > 2. Causa raíz técnica: Cuando se declaran estructuras complejas `<div class="modal">` dentro de celdas `<td>` o dentro de `<div class="table-responsive">`, el algoritmo de parseo HTML de los navegadores ejecuta *foster-parenting* (expulsión y duplicación de nodos inválidos fuera de la tabla), generando dos instancias idénticas del diálogo en el DOM. Además, el contenedor con scroll horizontal crea un nuevo contexto de apilamiento (*stacking context*) que hace que el backdrop `z-index: 1050` quede por encima del contenido interactivo, interceptando todos los eventos de puntero (*pointer-events*).
+  > 3. Corrección requerida:
+  >    - En la tabla de órdenes de matrícula, mantener exclusivamente el botón disparador: `data-bs-toggle="modal" data-bs-target="#modalAnularCoord-{{ m.id }}"`.
+  >    - Extraer la totalidad de los modales fuera de `<table>` y fuera de `<div class="table-responsive">`, ubicándolos en un ciclo dedicado al pie del contenedor principal.
+  >    - Asegurar identificadores únicos `modalAnularCoord-{{ m.id }}` con formulario POST a `{% url 'anular_matricula_coordinador' m.id %}`, token `{% csrf_token %}`, `<textarea name="motivo" class="form-control" rows="3" required placeholder="..."></textarea>` y botones funcionales."
+
+* **Prompt 6.8 (Estandarización de Comentarios Pedagógicos en Código Nuevo):**
+  > "Incorpora comentarios explicativos siguiendo el estándar pedagógico institucional del proyecto (`# ¿Por qué <técnica/decisión>?: <fundamento>`) en todos los nuevos componentes del ciclo de vida y anulación de matrículas:
+  > - En `models.py`: justificación de los campos de auditoría (`motivo_anulacion`, `fecha_anulacion`, `anulado_por`), y de las propiedades `permite_retracto` y `fecha_inicio_proxima`.
+  > - En `views.py`: justificación de la protección RBAC, validación de plazo legal pre-inicio y uso de `select_for_update()` con verificación de techo `cupos_maximos` para reposición atómica sin inconsistencias de sobrecupo.
+  > - En `serializers.py`: justificación del uso explícito de `serializers.ChoiceField` con opciones extendidas (`PENDIENTE`, `PAGADO`, `CANCELADO`, `ANULADA`) para mantener retrocompatibilidad sin acoplamiento rígido al modelo.
+  > - En `urls.py`: justificación de la segregación de endpoints dedicados por rol.
+  > - En plantillas HTML: comentarios `{# ¿Por qué ...?: #}` documentando la solución a los conflictos de apilamiento (*stacking context*), *foster-parenting* y aislamiento de modales de Bootstrap fuera de tablas y tarjetas."
+
+---
 *Nota: Este archivo es puramente documental y no debe ser importado por ningún módulo de Python.*

@@ -235,14 +235,23 @@
                                     <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill">
                                         PAGADO
                                     </span>
-                                {% elif m.estado == 'CANCELADO' %}
+                                {% elif m.estado == 'ANULADA' %}
                                     <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 rounded-pill">
+                                        ANULADA
+                                    </span>
+                                {% elif m.estado == 'CANCELADO' %}
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 rounded-pill">
                                         CANCELADO
                                     </span>
                                 {% else %}
                                     <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1 rounded-pill">
                                         PENDIENTE
                                     </span>
+                                {% endif %}
+                                {% if m.motivo_anulacion %}
+                                    <div class="text-muted small mt-1" style="font-size: 0.7rem;" title="{{ m.motivo_anulacion }}">
+                                        <i class="bi bi-info-circle me-1"></i>{{ m.motivo_anulacion|truncatechars:20 }}
+                                    </div>
                                 {% endif %}
                             </td>
                             <td class="pe-4 py-3 text-center">
@@ -252,6 +261,7 @@
                                         {% csrf_token %}
                                         <select name="nuevo_estado" class="form-select form-select-sm" style="width: 120px;" aria-label="Cambiar estado">
                                             <option value="PAGADO" {% if m.estado == 'PAGADO' %}selected{% endif %}>PAGADO</option>
+                                            <option value="ANULADA" {% if m.estado == 'ANULADA' %}selected{% endif %}>ANULADA</option>
                                             <option value="PENDIENTE" {% if m.estado == 'PENDIENTE' %}selected{% endif %}>PENDIENTE</option>
                                             <option value="CANCELADO" {% if m.estado == 'CANCELADO' %}selected{% endif %}>CANCELADO</option>
                                         </select>
@@ -260,15 +270,12 @@
                                         </button>
                                     </form>
 
-                                    <!-- Botón Directo Cancelar Matrícula (con reposición automática de cupos) -->
-                                    {% if m.estado != 'CANCELADO' %}
-                                        <form method="POST" action="{% url 'cancelar_matricula_coordinador' m.id %}" class="d-inline" onsubmit="return confirm('¿Seguro que deseas cancelar la matrícula #{{ m.id|stringformat:'05d' }}? Se repondrán los cupos automáticamente.');">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-danger fw-semibold d-flex align-items-center gap-1" title="Cancela la matrícula y repone cupos">
-                                                <i class="bi bi-x-circle"></i>
-                                                <span>Cancelar</span>
-                                            </button>
-                                        </form>
+                                    <!-- Botón Anular Matrícula (Modal con motivo obligatorio) -->
+                                    {% if m.estado != 'ANULADA' and m.estado != 'CANCELADO' %}
+                                        <button type="button" class="btn btn-sm btn-outline-danger fw-semibold d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalAnularCoord-{{ m.id }}" title="Anular matrícula y reponer cupos">
+                                            <i class="bi bi-slash-circle"></i>
+                                            <span>Anular Matrícula</span>
+                                        </button>
                                     {% else %}
                                         <span class="badge bg-secondary-subtle text-secondary small px-2 py-1 rounded-pill">
                                             <i class="bi bi-check-all me-1"></i> Cupos Repuestos
@@ -288,6 +295,43 @@
             </table>
         </div>
     </div>
+
+    {# ¿Por qué los modales de anulación se ubican fuera de <table> y de .table-responsive con modalAnularCoord-{{ m.id }}?: #}
+    {# 1. Prevención de Foster-Parenting: El parser de HTML del navegador no permite bloques <div> interactivos #}
+    {#    dentro de <table> o <tbody> fuera de celdas válidas, lo que provocaría la duplicación errónea del modal en el DOM. #}
+    {# 2. Supresión de bloqueos de cursor: El scroll horizontal de .table-responsive crea un stacking context propio #}
+    {#    que intercepta los eventos de clic en el textarea y en el botón de confirmación al desplegar el modal. #}
+    {# 3. Identificador dinámico: modalAnularCoord-{{ m.id }} vincula unívocamente el botón con su formulario POST específico. #}
+    {% for m in matriculas %}
+        {% if m.estado != 'ANULADA' and m.estado != 'CANCELADO' %}
+        <div class="modal fade" id="modalAnularCoord-{{ m.id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form method="POST" action="{% url 'anular_matricula_coordinador' m.id %}">
+                        {% csrf_token %}
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title"><i class="bi bi-shield-x"></i> Anular Matrícula #{{ m.id|stringformat:"05d" }}</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body text-start">
+                            <p>Estás por anular administrativamente la matrícula de <strong>{{ m.estudiante.get_full_name|default:m.estudiante.username }}</strong>.</p>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Motivo de la anulación *</label>
+                                <textarea name="motivo" class="form-control" rows="3" required placeholder="Ingresa obligatoriamente el motivo formal de la anulación..."></textarea>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-check-circle"></i> Confirmar Anulación
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% endfor %}
 
 </div>
 

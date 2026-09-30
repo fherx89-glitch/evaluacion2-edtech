@@ -625,5 +625,192 @@ class EdTechTestSuite(TestCase):
         msg_list_ok = [m.message for m in get_messages(resp_del_ok.wsgi_request)]
         self.assertTrue(any("eliminado definitivamente del catálogo" in m for m in msg_list_ok))
 
+    # =========================================================================
+    # TEST 14: CICLO DE VIDA Y ANULACIÓN DE MATRÍCULA POR EL ESTUDIANTE (RETRACTO)
+    # =========================================================================
+    # ¿Por qué este test?:
+    # Verifica de punta a punta el derecho a retracto: cambio a ANULADA, auditoría (fecha, motivo,
+    # anulado_por), restitución atómica de cupo y bloqueo cuando el curso ya inició.
+    def test_anulacion_matricula_estudiante_y_restitucion_cupos(self):
+        """
+        Valida que el estudiante pueda anular su matrícula ejerciendo derecho de retracto
+        antes del inicio de clases, reponiendo de forma atómica y segura el cupo al curso
+        y registrando la auditoría completa (fecha, motivo y anulado_por).
+        Asimismo, comprueba que si el curso ya inició, se deniegue el retracto.
+        """
+        # Preparar curso y matrícula en estado PAGADO con 1 cupo ocupado
+        self.curso_django.cupos_disponibles = 1
+        self.curso_django.save()
+
+        matricula = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_PAGADO,
+            total=Decimal('450000.00')
+        )
+        DetalleMatricula.objects.create(
+            matricula=matricula,
+            curso=self.curso_django,
+            precio_historico=Decimal('450000.00')
+        )
+
+        # Autenticar estudiante
+        self.client.login(username='estudiante_1', password='Est2026!')
+        anular_url = reverse('anular_matricula_estudiante', kwargs={'matricula_id': matricula.id})
+        resp = self.client.post(anular_url, follow=True)
+        self.assertEqual(resp.status_code, 200)
+
+        # Verificar actualización del modelo y auditoría
+        matricula.refresh_from_db()
+        self.assertEqual(matricula.estado, 'ANULADA')
+        self.assertEqual(matricula.motivo_anulacion, "Retracto voluntario ejercido por el estudiante")
+        self.assertEqual(matricula.anulado_por, self.estudiante)
+        self.assertIsNotNone(matricula.fecha_anulacion)
+
+        # Verificar restitución atómica de cupo sin exceder cupos_maximos (2)
+        self.curso_django.refresh_from_db()
+        self.assertEqual(self.curso_django.cupos_disponibles, 2)
+
+        # Probar denegación de retracto cuando el curso ya inició
+        curso_pasado = Curso.objects.create(
+            area=self.area_web,
+            titulo='Curso Antiguo Iniciado',
+            descripcion='Curso con fecha de inicio en el pasado',
+            costo_matricula=Decimal('200000.00'),
+            fecha_inicio=date(2025, 1, 1),
+            fecha_termino=date(2025, 3, 1),
+            cupos_maximos=5,
+            cupos_disponibles=4,
+            activo=True
+        )
+        matr_iniciada = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_PAGADO,
+            total=Decimal('200000.00')
+        )
+        DetalleMatricula.objects.create(
+            matricula=matr_iniciada,
+            curso=curso_pasado,
+            precio_historico=Decimal('200000.00')
+        )
+
+        resp_pasado = self.client.post(
+            reverse('anular_matricula_estudiante', kwargs={'matricula_id': matr_iniciada.id}),
+            follow=True
+        )
+        self.assertEqual(resp_pasado.status_code, 200)
+        matr_iniciada.refresh_from_db()
+        self.assertEqual(matr_iniciada.estado, 'PAGADO')  # No debe anularse
+        curso_pasado.refresh_from_db()
+        self.assertEqual(curso_pasado.cupos_disponibles, 4)  # Cupos no cambian
+
+    # =========================================================================
+    # TEST 15: ANULACIÓN ADMINISTRATIVA POR EL COORDINADOR CON MOTIVO
+    # =========================================================================
+    # ¿Por qué este test?:
+    # Garantiza que la anulación administrativa exija rol directivo, motivo obligatorio,
+    # restituya atómicamente los cupos sin sobrecupo y audite al coordinador responsable.
+    def test_anulacion_administrativa_coordinador_con_motivo(self):
+        """
+        Valida que el coordinador pueda anular administrativamente una matrícula ingresando
+        obligatoriamente el motivo, restituyendo de forma atómica los cupos del curso y
+        registrando fecha, motivo y anulado_por = coordinador.
+        """
+        self.curso_django.cupos_disponibles = 1
+        self.curso_django.save()
+
+        matricula = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_PAGADO,
+            total=Decimal('450000.00')
+        )
+        DetalleMatricula.objects.create(
+            matricula=matricula,
+            curso=self.curso_django,
+            precio_historico=Decimal('450000.00')
+        )
+
+        anular_coord_url = reverse('anular_matricula_coordinador', kwargs={'matricula_id': matricula.id})
+
+        # 1. Acceso no autorizado (estudiante) debe ser bloqueado
+        self.client.login(username='estudiante_1', password='Est2026!')
+        resp_bloqueado = self.client.post(anular_coord_url, {'motivo': 'Intento no autorizado'}, follow=True)
+        matricula.refresh_from_db()
+        self.assertEqual(matricula.estado, 'PAGADO')
+
+        # 2. Coordinador sin motivo obligatorio debe recibir error
+        self.client.login(username='coordinador_admin', password='Coord2026!')
+        resp_sin_motivo = self.client.post(anular_coord_url, {'motivo': '   '}, follow=True)
+        matricula.refresh_from_db()
+        self.assertEqual(matricula.estado, 'PAGADO')
+
+        # 3. Coordinador con motivo válido anula correctamente
+        motivo_admin = "Anulación administrativa por duplicidad de orden formal y solicitud del alumno"
+        resp_coord = self.client.post(anular_coord_url, {'motivo': motivo_admin}, follow=True)
+        self.assertEqual(resp_coord.status_code, 200)
+
+        matricula.refresh_from_db()
+        self.assertEqual(matricula.estado, 'ANULADA')
+        self.assertEqual(matricula.motivo_anulacion, motivo_admin)
+        self.assertEqual(matricula.anulado_por, self.coordinador)
+        self.assertIsNotNone(matricula.fecha_anulacion)
+
+        # Verificar reposición atómica de cupos
+        self.curso_django.refresh_from_db()
+        self.assertEqual(self.curso_django.cupos_disponibles, 2)
+
+    # =========================================================================
+    # TEST 16: VISTA MIS MATRÍCULAS EXCLUYE ANULADAS DE INVERSIÓN TOTAL
+    # =========================================================================
+    # ¿Por qué este test?:
+    # Comprueba la consistencia contable y visual: las matrículas anuladas no suman a la inversión total
+    # del estudiante y muestran claramente la fecha y el motivo institucional de la resolución.
+    def test_mis_matriculas_excluye_anuladas_de_inversion_total(self):
+        """
+        Valida que en la vista 'mis_matriculas', las matrículas con estado 'ANULADA'
+        se excluyan del total invertido, se muestre la insignia correspondiente
+        y se renderice el recuadro de aviso institucional con fecha y motivo.
+        """
+        from django.utils import timezone
+        fecha_anul = timezone.now()
+
+        matr_activa = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_PAGADO,
+            total=Decimal('450000.00')
+        )
+        DetalleMatricula.objects.create(
+            matricula=matr_activa,
+            curso=self.curso_django,
+            precio_historico=Decimal('450000.00')
+        )
+
+        matr_anulada = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_ANULADA,
+            total=Decimal('300000.00'),
+            fecha_anulacion=fecha_anul,
+            motivo_anulacion='Retracto voluntario formal',
+            anulado_por=self.estudiante
+        )
+        DetalleMatricula.objects.create(
+            matricula=matr_anulada,
+            curso=self.curso_django,
+            precio_historico=Decimal('300000.00')
+        )
+
+        self.client.login(username='estudiante_1', password='Est2026!')
+        resp = self.client.get(reverse('mis_matriculas'))
+        self.assertEqual(resp.status_code, 200)
+
+        # Inversión total debe ser solo los $450.000 de la matrícula PAGADA (excluyendo los $300.000 anulados)
+        self.assertEqual(resp.context['total_invertido'], Decimal('450000.00'))
+
+        # Validar contenido visual institucional
+        content = resp.content.decode('utf-8')
+        self.assertIn('ANULADA', content)
+        self.assertIn('Matrícula Anulada el', content)
+        self.assertIn('Retracto voluntario formal', content)
+
+
 
 

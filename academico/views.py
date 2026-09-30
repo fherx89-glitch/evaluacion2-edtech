@@ -15,6 +15,7 @@ from django.db.models import Q, Sum, Count
 from django.http import JsonResponse, HttpResponseForbidden
 from django.views.decorators.http import require_POST, require_http_methods
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 import django_filters
 
 # DRF Imports
@@ -364,16 +365,20 @@ class CambiarEstadoMatriculaAPIView(APIView):
         with transaction.atomic():
             detalles = matricula.detalles.select_related('curso').all()
 
-            # Caso 1: Se cancela una matrícula previamente PAGADA o PENDIENTE -> REPOSICIÓN DE CUPOS
-            if nuevo_estado == Matricula.ESTADO_CANCELADO and estado_anterior != Matricula.ESTADO_CANCELADO:
+            # Caso 1: Se cancela o anula una matrícula previamente PAGADA o PENDIENTE -> REPOSICIÓN DE CUPOS
+            if nuevo_estado in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA] and estado_anterior not in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA]:
                 for detalle in detalles:
                     curso = Curso.objects.select_for_update().get(pk=detalle.curso_id)
                     if curso.cupos_disponibles < curso.cupos_maximos:
                         curso.cupos_disponibles += 1
                         curso.save(update_fields=['cupos_disponibles'])
+                if nuevo_estado == Matricula.ESTADO_ANULADA:
+                    matricula.fecha_anulacion = timezone.now()
+                    matricula.anulado_por = request.user
+                    matricula.motivo_anulacion = "Anulación administrativa vía API"
 
-            # Caso 2: Se reactiva una matrícula CANCELADA a PAGADO -> VALIDAR Y DESCONTAR CUPOS
-            elif estado_anterior == Matricula.ESTADO_CANCELADO and nuevo_estado == Matricula.ESTADO_PAGADO:
+            # Caso 2: Se reactiva una matrícula CANCELADA o ANULADA a PAGADO -> VALIDAR Y DESCONTAR CUPOS
+            elif estado_anterior in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA] and nuevo_estado == Matricula.ESTADO_PAGADO:
                 for detalle in detalles:
                     curso = Curso.objects.select_for_update().get(pk=detalle.curso_id)
                     if curso.cupos_disponibles <= 0:
@@ -385,7 +390,10 @@ class CambiarEstadoMatriculaAPIView(APIView):
                     curso.save(update_fields=['cupos_disponibles'])
 
             matricula.estado = nuevo_estado
-            matricula.save(update_fields=['estado'])
+            if nuevo_estado == Matricula.ESTADO_ANULADA:
+                matricula.save(update_fields=['estado', 'fecha_anulacion', 'anulado_por', 'motivo_anulacion'])
+            else:
+                matricula.save(update_fields=['estado'])
 
         return Response(
             {
@@ -781,7 +789,7 @@ def cambiar_estado_matricula_web_view(request, matricula_id):
     nuevo_estado = request.POST.get('nuevo_estado')
     estado_anterior = matricula.estado
 
-    if nuevo_estado not in [Matricula.ESTADO_PENDIENTE, Matricula.ESTADO_PAGADO, Matricula.ESTADO_CANCELADO]:
+    if nuevo_estado not in [Matricula.ESTADO_PENDIENTE, Matricula.ESTADO_PAGADO, Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA]:
         messages.error(request, 'Estado seleccionado no válido.')
         return redirect('panel_coordinador')
 
@@ -792,15 +800,19 @@ def cambiar_estado_matricula_web_view(request, matricula_id):
     with transaction.atomic():
         detalles = matricula.detalles.select_related('curso').all()
 
-        if nuevo_estado == Matricula.ESTADO_CANCELADO and estado_anterior != Matricula.ESTADO_CANCELADO:
+        if nuevo_estado in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA] and estado_anterior not in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA]:
             for detalle in detalles:
                 c = Curso.objects.select_for_update().get(pk=detalle.curso_id)
                 if c.cupos_disponibles < c.cupos_maximos:
                     c.cupos_disponibles += 1
                     c.save(update_fields=['cupos_disponibles'])
-            messages.success(request, f'Matrícula #{matricula.id} CANCELADA. Se repusieron los cupos a los cursos asociados.')
+            messages.success(request, f'Matrícula #{matricula.id} {nuevo_estado}. Se repusieron los cupos a los cursos asociados.')
+            if nuevo_estado == Matricula.ESTADO_ANULADA:
+                matricula.fecha_anulacion = timezone.now()
+                matricula.anulado_por = request.user
+                matricula.motivo_anulacion = "Anulación administrativa vía selector"
 
-        elif estado_anterior == Matricula.ESTADO_CANCELADO and nuevo_estado == Matricula.ESTADO_PAGADO:
+        elif estado_anterior in [Matricula.ESTADO_CANCELADO, Matricula.ESTADO_ANULADA] and nuevo_estado == Matricula.ESTADO_PAGADO:
             for detalle in detalles:
                 c = Curso.objects.select_for_update().get(pk=detalle.curso_id)
                 if c.cupos_disponibles <= 0:
@@ -813,7 +825,10 @@ def cambiar_estado_matricula_web_view(request, matricula_id):
             messages.success(request, f'Estado de matrícula #{matricula.id} modificado a {nuevo_estado}.')
 
         matricula.estado = nuevo_estado
-        matricula.save(update_fields=['estado'])
+        if nuevo_estado == Matricula.ESTADO_ANULADA:
+            matricula.save(update_fields=['estado', 'fecha_anulacion', 'anulado_por', 'motivo_anulacion'])
+        else:
+            matricula.save(update_fields=['estado'])
 
     return redirect('panel_coordinador')
 
@@ -889,6 +904,128 @@ def cancelar_matricula_coordinador_view(request, matricula_id):
         request,
         f'Matrícula #{matricula.id:05d} cancelada exitosamente. Se repusieron los cupos en el inventario.'
     )
+    return redirect('panel_coordinador')
+
+
+# ==============================================================================
+# ANULACIÓN DE MATRÍCULAS (RETRACTO ESTUDIANTE Y GESTIÓN COORDINADOR)
+# ==============================================================================
+# ¿Por qué esta vista y su control de retracto?:
+# 1. @login_required: Garantiza la identidad activa del estudiante solicitante.
+# 2. Validación de propiedad y estado: Impide que usuarios malintencionados anulen órdenes ajenas
+#    o que no estén en estado PAGADO (evitando inconsistencias de inventario).
+# 3. Plazo legal de retracto: Comprueba que hoy < min(fechas_inicio); si el curso ya empezó,
+#    se deniega el retracto protegiendo los compromisos docentes y de aula ya iniciados.
+# 4. transaction.atomic() con select_for_update(): Si la orden agrupa múltiples cursos, garantiza
+#    que el paso a ANULADA, la auditoría y la restitución (+1 cupo sin rebasar cupos_maximos)
+#    se persistan de manera indivisible sin condiciones de carrera.
+@login_required
+def anular_matricula_estudiante(request, matricula_id):
+    """
+    Vista protegida para que un estudiante ejerza su derecho de retracto voluntario.
+    Valida pertenencia, estado 'PAGADO' y que la fecha actual sea anterior al inicio del curso
+    (o del curso más próximo en la orden). Ejecuta transacción atómica para anulación y reposición de cupos.
+    """
+    matricula = get_object_or_404(Matricula, pk=matricula_id)
+
+    # 1. Validar pertenencia del usuario autenticado
+    if matricula.estudiante != request.user:
+        messages.error(request, 'No tienes autorización para anular esta matrícula.')
+        return redirect('mis_matriculas')
+
+    # 2. Validar que esté en estado PAGADO
+    if matricula.estado != Matricula.ESTADO_PAGADO:
+        messages.error(request, f'Solo se pueden anular matrículas en estado PAGADO. Estado actual: {matricula.get_estado_display()}.')
+        return redirect('mis_matriculas')
+
+    # 3. Validar plazo de retracto: solo permitir si la fecha actual es anterior a la fecha de inicio del curso más próximo
+    hoy = timezone.now().date()
+    fechas_inicio = [
+        detalle.curso.fecha_inicio
+        for detalle in matricula.detalles.select_related('curso').all()
+        if detalle.curso and detalle.curso.fecha_inicio
+    ]
+
+    if fechas_inicio:
+        fecha_proxima = min(fechas_inicio)
+        if hoy >= fecha_proxima:
+            messages.error(
+                request,
+                f'No es posible ejercer el retracto: el programa inició el {fecha_proxima.strftime("%d/%m/%Y")} o inicia hoy. El plazo de retracto ha expirado.'
+            )
+            return redirect('mis_matriculas')
+
+    # 4. Transacción atómica: cambio a ANULADA, auditoría y reposición segura de cupos
+    with transaction.atomic():
+        matricula.estado = Matricula.ESTADO_ANULADA
+        matricula.fecha_anulacion = timezone.now()
+        matricula.motivo_anulacion = "Retracto voluntario ejercido por el estudiante"
+        matricula.anulado_por = request.user
+        matricula.save(update_fields=['estado', 'fecha_anulacion', 'motivo_anulacion', 'anulado_por'])
+
+        # ¿Por qué select_for_update() y comprobación c.cupos_disponibles < c.cupos_maximos?:
+        # El bloqueo pesimista en PostgreSQL evita condiciones de carrera durante la anulación,
+        # mientras que el techo c.cupos_maximos garantiza que la reposición no sobrepase la capacidad física del aula.
+        for detalle in matricula.detalles.select_related('curso').all():
+            c = Curso.objects.select_for_update().get(pk=detalle.curso_id)
+            if c.cupos_disponibles < c.cupos_maximos:
+                c.cupos_disponibles += 1
+                c.save(update_fields=['cupos_disponibles'])
+
+    messages.success(
+        request,
+        f"Se ha ejercido el derecho a retracto. La matrícula #{matricula.id:05d} fue anulada y tus cupos han sido liberados."
+    )
+    return redirect('mis_matriculas')
+
+
+# ¿Por qué esta vista para coordinadores?:
+# 1. @require_POST y verificación RBAC: Asegura que la anulación administrativa sea una mutación
+#    explícita invocada solo por coordinadores autorizados o staff.
+# 2. Motivo obligatorio: Toda resolución académica directiva exige un fundamento explícito para trazabilidad de auditoría.
+# 3. Transacción atómica: Restituye el inventario en los cursos involucrados y asocia 'anulado_por' al usuario directivo.
+@login_required
+@require_POST
+def anular_matricula_coordinador(request, matricula_id):
+    """
+    Vista protegida para que un coordinador anule administrativamente una matrícula.
+    Requiere obligatoriamente un motivo vía POST, ejecuta transacción atómica para pasar
+    a 'ANULADA', registrar auditoría y reponer cupos.
+    """
+    if not (getattr(request.user, 'is_coordinador', False) or getattr(request.user, 'role', None) == 'COORDINADOR' or getattr(request.user, 'rol', None) == 'COORDINADOR' or request.user.is_staff or request.user.is_superuser):
+        messages.error(request, 'Acceso restringido: Se requieren permisos de Coordinador Académico.')
+        return redirect('catalogo')
+
+    matricula = get_object_or_404(Matricula, pk=matricula_id)
+    motivo = request.POST.get('motivo', '').strip()
+
+    # Validar campo obligatorio 'motivo'
+    if not motivo:
+        messages.error(request, 'Debe especificar obligatoriamente un motivo para anular la matrícula.')
+        return redirect('panel_coordinador')
+
+    if matricula.estado == Matricula.ESTADO_ANULADA:
+        messages.info(request, f'La matrícula #{matricula.id:05d} ya se encuentra en estado ANULADA.')
+        return redirect('panel_coordinador')
+
+    with transaction.atomic():
+        # ¿Por qué verificar matricula.estado != Matricula.ESTADO_CANCELADO?:
+        # Si la matrícula ya se encontraba previamente en CANCELADO, sus cupos ya habían sido
+        # devueltos al inventario por una acción anterior. Esta comprobación previene sumar vacantes duplicadas.
+        if matricula.estado != Matricula.ESTADO_CANCELADO:
+            for detalle in matricula.detalles.select_related('curso').all():
+                c = Curso.objects.select_for_update().get(pk=detalle.curso_id)
+                if c.cupos_disponibles < c.cupos_maximos:
+                    c.cupos_disponibles += 1
+                    c.save(update_fields=['cupos_disponibles'])
+
+        matricula.estado = Matricula.ESTADO_ANULADA
+        matricula.fecha_anulacion = timezone.now()
+        matricula.motivo_anulacion = motivo
+        matricula.anulado_por = request.user
+        matricula.save(update_fields=['estado', 'fecha_anulacion', 'motivo_anulacion', 'anulado_por'])
+
+    messages.success(request, f"Matrícula #{matricula.id:05d} anulada correctamente y cupos restituidos.")
     return redirect('panel_coordinador')
 
 
