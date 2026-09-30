@@ -5,29 +5,50 @@
 {% block title %}Panel de Coordinación Académica | EdTech{% endblock %}
 
 {% block content %}
+<style>
+    /* Botón de Apertura de Curso con color Rojo Carmesí Fijo (inmune a cambios de tema del campus) */
+    #btn-nuevo-curso-panel,
+    .btn-rojo-fijo {
+        background-color: #e11d48 !important;
+        border-color: #e11d48 !important;
+        color: #ffffff !important;
+        transition: all 0.2s ease-in-out;
+    }
+    #btn-nuevo-curso-panel:hover,
+    #btn-nuevo-curso-panel:focus,
+    #btn-nuevo-curso-panel:active,
+    .btn-rojo-fijo:hover,
+    .btn-rojo-fijo:focus,
+    .btn-rojo-fijo:active {
+        background-color: #be123c !important;
+        border-color: #be123c !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4) !important;
+        transform: translateY(-1px);
+    }
+</style>
+
 <div class="container py-4">
 
-    <!-- Encabezado del Panel -->
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 pb-2 border-bottom">
+    <!-- Encabezado Ejecutivo del Panel de Coordinación -->
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-4 pb-3 border-bottom">
         <div>
-            <div class="d-flex align-items-center gap-2 mb-1">
-                <span class="badge bg-warning text-dark px-2 py-1 fw-bold rounded-pill">
-                    <i class="bi bi-shield-lock-fill"></i> Rol Coordinador
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <span class="badge bg-warning text-dark px-3 py-1.5 fw-bold rounded-pill shadow-xs">
+                    <i class="bi bi-shield-lock-fill me-1"></i> Rol Coordinador: Módulo de Administración Académica y Control de Cupos
                 </span>
-                <span class="text-muted small">Módulo de Administración Académica y Control de Cupos</span>
             </div>
             <h2 class="fw-bold text-dark mb-0">Panel de Control & Inventario de Cupos</h2>
         </div>
-        <div class="mt-2 mt-sm-0 d-flex gap-2 flex-wrap">
-            <button type="button" class="btn btn-primary btn-sm fw-semibold shadow-sm" data-bs-toggle="modal" data-bs-target="#modalNuevoCurso" id="btn-nuevo-curso-panel">
-                <i class="bi bi-plus-circle-fill me-1"></i> + Abrir Nuevo Bootcamp / Curso
+        <div class="d-flex align-items-center gap-2 flex-wrap mt-2 mt-lg-0">
+            <button type="button" class="btn btn-rojo-fijo fw-semibold shadow-sm py-2 px-3 d-flex align-items-center gap-2 text-white" data-bs-toggle="modal" data-bs-target="#modalNuevoCurso" id="btn-nuevo-curso-panel" style="background-color: #e11d48 !important; border-color: #e11d48 !important; color: #ffffff !important;">
+                <i class="bi bi-plus-circle-fill"></i>
+                <span>+ Abrir Nuevo Bootcamp / Curso</span>
             </button>
-            <a href="{% url 'swagger-ui' %}" target="_blank" class="btn btn-outline-info btn-sm">
-                <i class="bi bi-code-slash me-1"></i> Swagger API Docs
-            </a>
-            <a href="{% url 'catalogo' %}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-eye me-1"></i> Ver Catálogo Público
-            </a>
+            <button type="button" class="btn btn-success fw-semibold shadow-sm py-2 px-3 d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalCrearCoordinador" id="btn-crear-coordinador-panel">
+                <i class="bi bi-person-plus-fill"></i>
+                <span>+ Registrar Nuevo Coordinador</span>
+            </button>
         </div>
     </div>
 
@@ -176,6 +197,11 @@
                                             <i class="bi bi-arrow-repeat me-1"></i> Restablecer
                                         </button>
                                     </form>
+
+                                    <!-- Botón Archivar / Dar de Baja (Soft Delete) con Modal -->
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#modalArchivarCurso-{{ c.id }}" title="Archivar / Dar de Baja" id="btn-archivar-panel-{{ c.id }}">
+                                        <i class="bi bi-archive me-1"></i> Archivar
+                                    </button>
                                 </div>
                             </td>
                         </tr>
@@ -183,6 +209,84 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    {# ¿Por qué la sección Historial de Programas Archivados en el Panel del Coordinador?: #}
+    {# Centraliza la supervisión del inventario curricular inactivo bajo el patrón de Soft Delete. #}
+    {# Permite auditar la fecha exacta de retiro de cada programa y provee un botón seguro de #}
+    {# reactivación inmediata mediante formulario POST para restaurarlo al catálogo sin reprocesar datos. #}
+    <!-- SECCIÓN SECUNDARIA: HISTORIAL DE PROGRAMAS ARCHIVADOS (SOFT DELETE) -->
+    <div class="card card-custom border-0 shadow-sm mb-5 overflow-hidden">
+        <div class="p-4 bg-white border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                    <i class="bi bi-archive-fill text-warning"></i>
+                    <span>Historial de Programas Archivados ({{ cursos_archivados|length }})</span>
+                </h5>
+                <p class="text-muted small mb-0">Programas retirados del catálogo público bajo borrado lógico (Soft Delete) con trazabilidad histórica preservada.</p>
+            </div>
+            <span class="badge bg-light text-secondary border px-3 py-1.5 rounded-pill">
+                {{ cursos_archivados|length }} archivados
+            </span>
+        </div>
+
+        {% if cursos_archivados %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="bg-light text-secondary small text-uppercase fw-bold">
+                        <tr>
+                            <th class="ps-4 py-3">Nombre del Programa</th>
+                            <th class="py-3">Área de Conocimiento</th>
+                            <th class="py-3 text-center">Periodo Original</th>
+                            <th class="py-3 text-center">Fecha de Archivado / Retiro</th>
+                            <th class="pe-4 py-3 text-center">Acción Operativa</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y">
+                        {% for ca in cursos_archivados %}
+                            <tr>
+                                <td class="ps-4 py-3">
+                                    <div class="fw-bold text-dark">{{ ca.titulo }}</div>
+                                    <div class="d-flex align-items-center gap-2 mt-1">
+                                        <span class="text-muted small">ID: #{{ ca.id }}</span>
+                                        <span class="badge bg-warning-subtle text-warning border border-warning-subtle" style="font-size: 0.7rem;">
+                                            <i class="bi bi-pause-circle-fill"></i> Retirado de Admisiones
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="py-3">
+                                    <span class="badge-area-pill" style="font-size: 0.72rem;">{{ ca.area.nombre }}</span>
+                                </td>
+                                <td class="py-3 text-center text-muted small">
+                                    {{ ca.fecha_inicio|date:"d/m/Y" }} - {{ ca.fecha_termino|date:"d/m/Y" }}
+                                </td>
+                                <td class="py-3 text-center small text-muted">
+                                    {% if ca.fecha_desactivacion %}
+                                        <i class="bi bi-clock-history me-1 text-danger"></i> {{ ca.fecha_desactivacion|date:"d/m/Y H:i" }}
+                                    {% else %}
+                                        <span class="text-muted">Previamente retirado</span>
+                                    {% endif %}
+                                </td>
+                                <td class="pe-4 py-3 text-center">
+                                    <form method="POST" action="{% url 'reactivar_curso' ca.id %}" class="d-inline" onsubmit="return confirm('¿Confirmas la reactivación del programa &quot;{{ ca.titulo }}&quot; para publicarlo nuevamente en el catálogo de admisiones?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success fw-semibold shadow-xs d-inline-flex align-items-center gap-1" id="btn-reactivar-curso-{{ ca.id }}" title="Reactivar y publicar nuevamente en el catálogo">
+                                            <i class="bi bi-arrow-counterclockwise"></i> Reactivar Programa
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-inbox fs-2 text-secondary d-block mb-2"></i>
+                <div class="fw-semibold text-dark">No hay programas académicos archivados</div>
+                <small class="text-muted">Todos los cursos registrados se encuentran actualmente activos y publicados en el catálogo de admisiones.</small>
+            </div>
+        {% endif %}
     </div>
 
     <!-- SECCIÓN 2: ADMINISTRACIÓN DE MATRÍCULAS & CONTROL DE TRANSACCIONES -->
@@ -331,6 +435,46 @@
             </div>
         </div>
         {% endif %}
+    {% endfor %}
+
+    {# ¿Por qué los modales de archivado se ubican fuera de <table> y .table-responsive con advertencia preventiva?: #}
+    {# 1. Prevención de Foster-Parenting: Evita que el parser HTML expulse o duplique el diálogo en el DOM. #}
+    {# 2. Supresión de bloqueos de cursor: Evita que el stacking context con scroll horizontal capture eventos pointer-events. #}
+    {# 3. Advertencia de Integridad Histórica: Asegura que el coordinador esté plenamente informado de que archivar #}
+    {#    el curso preserva intactos los comprobantes de estudiantes ya matriculados y solo suspende nuevas admisiones. #}
+    {% for c in cursos_activos %}
+    <div class="modal fade" id="modalArchivarCurso-{{ c.id }}" tabindex="-1" aria-labelledby="modalArchivarCursoLabel-{{ c.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <form method="POST" action="{% url 'eliminar_curso_coordinador' c.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title fw-bold fs-6" id="modalArchivarCursoLabel-{{ c.id }}">
+                            <i class="bi bi-archive-fill me-2"></i> Archivar Programa Académico
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body p-4 text-start">
+                        <p class="text-dark mb-3">
+                            ¿Estás seguro de que deseas archivar el programa <strong>{{ c.titulo }}</strong> y retirarlo del catálogo público?
+                        </p>
+                        <div class="alert alert-warning border-0 small mb-0 d-flex align-items-start gap-2">
+                            <i class="bi bi-info-circle-fill text-warning-emphasis fs-5 flex-shrink-0"></i>
+                            <div>
+                                Si este curso cuenta con estudiantes matriculados, se mantendrán sus comprobantes históricos intactos y solo se suspenderá la admisión a nuevos postulantes.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-warning fw-semibold">
+                            <i class="bi bi-archive-fill me-1"></i> Confirmar y Archivar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     {% endfor %}
 
 </div>
@@ -484,6 +628,122 @@
     </div>
 </div>
 
+<!-- ========================================================================= -->
+<!-- MODAL INSTITUCIONAL: ALTA DE NUEVO COORDINADOR (RBAC EXCLUSIVO)           -->
+<!-- ========================================================================= -->
+<div class="modal fade" id="modalCrearCoordinador" tabindex="-1" aria-labelledby="modalCrearCoordinadorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-header bg-dark text-white p-4" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="p-2 px-3 rounded-circle bg-success text-white shadow-sm">
+                        <i class="bi bi-person-plus-fill fs-3"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold text-white mb-0" id="modalCrearCoordinadorLabel">
+                            Alta de Nuevo Coordinador Académico
+                        </h5>
+                        <p class="text-white-50 small mb-0">Aprovisionamiento seguro de credenciales directivas bajo arquitectura RBAC</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form method="POST" action="{% url 'crear_coordinador' %}" id="form-crear-coordinador" novalidate>
+                {% csrf_token %}
+                <div class="modal-body p-4 bg-light">
+                    <!-- Banner explicativo RBAC -->
+                    <div class="alert alert-info border-0 shadow-sm d-flex align-items-center gap-2 mb-4 py-2 px-3">
+                        <i class="bi bi-shield-lock-fill fs-5 text-info"></i>
+                        <div class="small">
+                            <strong>Control RBAC Directivo:</strong> Esta cuenta tendrá rol inmutable <code>COORDINADOR</code> con facultades de administración de cursos, inventario y control de vacantes.
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Nombre de usuario único -->
+                        <div class="col-12">
+                            <label for="coord-username" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-person-badge text-primary me-1"></i> Nombre de Usuario Único <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-at"></i></span>
+                                <input type="text" class="form-control py-2" id="coord-username" name="username" placeholder="ej: c_rodriguez" required autocomplete="off">
+                            </div>
+                            <small class="text-muted" style="font-size: 0.72rem;">Identificador único intransferible para el acceso a la plataforma.</small>
+                        </div>
+
+                        <!-- Nombre Completo -->
+                        <div class="col-md-6">
+                            <label for="coord-first-name" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-person text-secondary me-1"></i> Nombres <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control py-2" id="coord-first-name" name="first_name" placeholder="ej: Claudia" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="coord-last-name" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-person text-secondary me-1"></i> Apellidos <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" class="form-control py-2" id="coord-last-name" name="last_name" placeholder="ej: González" required>
+                        </div>
+
+                        <!-- Campo nombre_completo unificado -->
+                        <input type="hidden" name="nombre_completo" id="coord-nombre-completo">
+
+                        <!-- Correo Electrónico Institucional -->
+                        <div class="col-12">
+                            <label for="coord-email" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-envelope-at text-info me-1"></i> Correo Electrónico Institucional <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control py-2" id="coord-email" name="email" placeholder="ej: directivo@edtech.cl" required>
+                            </div>
+                            <small class="text-muted" style="font-size: 0.72rem;">Correo oficial institucional para notificaciones y trazabilidad académica.</small>
+                        </div>
+
+                        <!-- Contraseña y confirmación -->
+                        <div class="col-md-6">
+                            <label for="coord-password" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-lock-fill text-danger me-1"></i> Contraseña <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-key-fill"></i></span>
+                                <input type="password" class="form-control py-2" id="coord-password" name="password" placeholder="Mínimo 4 caracteres" minlength="4" required>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="coord-confirm-password" class="form-label fw-bold small text-dark">
+                                <i class="bi bi-shield-check text-success me-1"></i> Confirmar Contraseña <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white text-muted"><i class="bi bi-check2-circle"></i></span>
+                                <input type="password" class="form-control py-2" id="coord-confirm-password" name="confirm_password" placeholder="Repite la contraseña" minlength="4" required>
+                            </div>
+                        </div>
+
+                        <!-- Indicador visual dinámico de validación -->
+                        <div class="col-12">
+                            <div id="coord-password-feedback" class="d-none small p-2 rounded-2 border"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light px-4 py-3 border-0">
+                    <button type="button" class="btn btn-outline-secondary px-4 py-2" data-bs-dismiss="modal">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="btn btn-success px-4 py-2 fw-semibold shadow-sm" id="btn-submit-crear-coordinador">
+                        <i class="bi bi-person-check-fill me-1"></i> Crear Cuenta de Coordinador
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const selectPreset = document.getElementById('select-preset-panel-laboratorio');
@@ -555,6 +815,81 @@ document.addEventListener('DOMContentLoaded', function() {
             if (btnSubmit) {
                 btnSubmit.disabled = true;
                 btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Publicando en Catálogo...';
+            }
+        });
+    }
+
+    // =========================================================================
+    // VALIDACIÓN CLIENTE: ALTA DE NUEVO COORDINADOR (RBAC)
+    // =========================================================================
+    const formCrearCoord = document.getElementById('form-crear-coordinador');
+    const inputCoordUsername = document.getElementById('coord-username');
+    const inputCoordFirst = document.getElementById('coord-first-name');
+    const inputCoordLast = document.getElementById('coord-last-name');
+    const inputCoordNombreCompleto = document.getElementById('coord-nombre-completo');
+    const inputCoordEmail = document.getElementById('coord-email');
+    const inputCoordPass = document.getElementById('coord-password');
+    const inputCoordConfirm = document.getElementById('coord-confirm-password');
+    const feedbackCoordPass = document.getElementById('coord-password-feedback');
+    const btnSubmitCoord = document.getElementById('btn-submit-crear-coordinador');
+
+    function validarContraseñasCoordinador() {
+        if (!inputCoordPass || !inputCoordConfirm || !feedbackCoordPass) return true;
+        const p1 = inputCoordPass.value;
+        const p2 = inputCoordConfirm.value;
+
+        if (!p2) {
+            feedbackCoordPass.className = 'd-none';
+            return true;
+        }
+
+        if (p1 !== p2) {
+            feedbackCoordPass.className = 'small p-2 rounded-2 border alert-danger text-danger d-block';
+            feedbackCoordPass.innerHTML = '<i class="bi bi-x-circle-fill me-1"></i> Las contraseñas no coinciden.';
+            return false;
+        } else if (p1.length < 4) {
+            feedbackCoordPass.className = 'small p-2 rounded-2 border alert-warning text-warning d-block';
+            feedbackCoordPass.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> La contraseña debe contener al menos 4 caracteres.';
+            return false;
+        } else {
+            feedbackCoordPass.className = 'small p-2 rounded-2 border alert-success text-success d-block';
+            feedbackCoordPass.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Las contraseñas coinciden correctamente.';
+            return true;
+        }
+    }
+
+    if (inputCoordPass && inputCoordConfirm) {
+        inputCoordPass.addEventListener('input', validarContraseñasCoordinador);
+        inputCoordConfirm.addEventListener('input', validarContraseñasCoordinador);
+    }
+
+    if (formCrearCoord) {
+        formCrearCoord.addEventListener('submit', function(e) {
+            if (inputCoordFirst && inputCoordLast && inputCoordNombreCompleto) {
+                inputCoordNombreCompleto.value = `${inputCoordFirst.value.trim()} ${inputCoordLast.value.trim()}`.trim();
+            }
+
+            if (!inputCoordUsername.value.trim() || !inputCoordEmail.value.trim() || !inputCoordPass.value || !inputCoordConfirm.value) {
+                e.preventDefault();
+                alert('Por favor complete todos los campos requeridos para crear el nuevo coordinador.');
+                return false;
+            }
+
+            if (inputCoordPass.value !== inputCoordConfirm.value) {
+                e.preventDefault();
+                alert('Las contraseñas no coinciden. Por favor verifíquelas antes de continuar.');
+                return false;
+            }
+
+            if (inputCoordPass.value.length < 4) {
+                e.preventDefault();
+                alert('La contraseña debe tener una longitud mínima de 4 caracteres.');
+                return false;
+            }
+
+            if (btnSubmitCoord) {
+                btnSubmitCoord.disabled = true;
+                btnSubmitCoord.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span> Creando Coordinador...';
             }
         });
     }

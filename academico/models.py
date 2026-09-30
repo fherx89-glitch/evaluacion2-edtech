@@ -58,14 +58,25 @@ class CustomUser(AbstractUser):
     def __str__(self):
         return f"{self.username} ({self.get_rol_display()})"
 
-    # ¿Por qué definimos este getter property .role?:
+    def __init__(self, *args, **kwargs):
+        role_val = kwargs.pop('role', None)
+        super().__init__(*args, **kwargs)
+        if role_val is not None:
+            self.rol = role_val
+
+    # ¿Por qué definimos este getter property .role y setter?:
     # Permite compatibilidad transparente con plantillas o servicios que consulten
-    # tanto 'user.rol' (en español) como 'user.role' (en inglés).
+    # tanto 'user.rol' (en español) como 'user.role' (en inglés), y permite instanciar
+    # o asignar CustomUser(role='COORDINADOR') con total seguridad.
     @property
     def role(self):
         if self.rol == self.ROLE_COORDINADOR or self.is_staff or self.is_superuser:
             return self.ROLE_COORDINADOR
         return self.rol
+
+    @role.setter
+    def role(self, value):
+        self.rol = value
 
     # ¿Por qué propiedades booleanas is_estudiante e is_coordinador?:
     # Facilitan la lectura de código en vistas y plantillas (ej: user.is_coordinador),
@@ -165,9 +176,20 @@ class Curso(models.Model):
         default=20,
         verbose_name="Cantidad de Computadores"
     )
+    # ¿Por qué los campos activo y fecha_desactivacion en Curso?:
+    # Implementan el patrón de Borrado Lógico (Soft Delete).
+    # Una eliminación física (Hard Delete) corrompería llaves foráneas en DetalleMatricula
+    # y destruiría la trazabilidad de pagos históricos en PostgreSQL. Al marcar 'activo=False'
+    # y 'fecha_desactivacion=timezone.now()', el programa se retira del catálogo de admisiones
+    # pero mantiene intacto todo su historial académico y permite su reactivación operativa futura.
     activo = models.BooleanField(
         default=True,
-        verbose_name='Curso Activo'
+        verbose_name="Programa Activo"
+    )
+    fecha_desactivacion = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Fecha de Desactivación"
     )
 
     class Meta:
@@ -474,6 +496,16 @@ class Matricula(models.Model):
         """Retorna la fecha de inicio del curso más próximo en la orden de matrícula."""
         fechas = [det.curso.fecha_inicio for det in self.detalles.all() if det.curso and det.curso.fecha_inicio]
         return min(fechas) if fechas else None
+
+    # ¿Por qué la propiedad tiene_cursos_archivados?:
+    # Permite identificar de manera limpia si alguno de los cursos contenidos en la orden de matrícula
+    # ha sido dado de baja o archivado (activo=False) en el catálogo público, habilitando el feedback visual
+    # institucional en 'mis_matriculas.html' para tranquilidad del estudiante y trazabilidad informativa.
+    @property
+    def tiene_cursos_archivados(self):
+        """Retorna True si alguno de los cursos incluidos en la matrícula está archivado (activo=False)."""
+        return any(det.curso and not det.curso.activo for det in self.detalles.all())
+
 
 
 # ==============================================================================

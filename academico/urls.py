@@ -7,7 +7,7 @@ Alumno: Fernando Pailahueque | Sección: AP-N4-C2 | Año: 2026
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
-from .views import anular_matricula_estudiante, anular_matricula_coordinador
+from .views import anular_matricula_estudiante, anular_matricula_coordinador, crear_coordinador
 
 # Router para ViewSets de DRF
 router = DefaultRouter()
@@ -34,6 +34,7 @@ urlpatterns = [
     # pre-inicio validando propiedad, mientras que 'anular_matricula_coordinador' exige motivo institucional.
     path('matricula/<int:matricula_id>/anular/', anular_matricula_estudiante, name='anular_matricula_estudiante'),
     path('coordinador/', views.panel_coordinador_view, name='panel_coordinador'),
+    path('coordinador/nuevo/', crear_coordinador, name='crear_coordinador'),
     path('coordinador/matricula/<int:matricula_id>/anular/', anular_matricula_coordinador, name='anular_matricula_coordinador'),
     path('coordinador/matricula/<int:matricula_id>/cambiar-estado/', views.cambiar_estado_matricula_web_view, name='cambiar_estado_web'),
     path('coordinador/curso/<int:curso_id>/cerrar-cupos/', views.cerrar_cupos_curso_view, name='cerrar_cupos_curso'),
@@ -41,7 +42,13 @@ urlpatterns = [
     path('coordinador/matricula/<int:matricula_id>/cancelar/', views.cancelar_matricula_coordinador_view, name='cancelar_matricula_coordinador'),
     path('coordinador/curso/nuevo/', views.crear_curso_coordinador_view, name='crear_curso_coordinador'),
     path('coordinador/curso/<int:curso_id>/editar/', views.editar_curso_coordinador_view, name='editar_curso_coordinador'),
+    # ¿Por qué rutas dedicadas para archivar y reactivar cursos?:
+    # Permiten separar conceptualmente las operaciones de ciclo de vida del catálogo bajo el patrón
+    # de Borrado Lógico (Soft Delete), manteniendo 'eliminar/' como alias compatible y 'reactivar/'
+    # como la acción de reincorporación formal exclusiva para el rol COORDINADOR.
     path('coordinador/curso/<int:curso_id>/eliminar/', views.eliminar_curso_coordinador_view, name='eliminar_curso_coordinador'),
+    path('coordinador/curso/<int:curso_id>/archivar/', views.eliminar_curso_coordinador_view, name='archivar_curso'),
+    path('coordinador/curso/<int:curso_id>/reactivar/', views.reactivar_curso, name='reactivar_curso'),
 
     # =========================================================================
     # RUTAS API REST ('api/...')

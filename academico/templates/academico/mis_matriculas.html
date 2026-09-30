@@ -152,7 +152,12 @@
                                     {% for det in m.detalles.all %}
                                         <tr>
                                             <td class="py-2">
-                                                <div class="fw-semibold text-dark">{{ det.curso.titulo }}</div>
+                                                <div class="fw-semibold text-dark">
+                                                    {{ det.curso.titulo }}
+                                                    {% if not det.curso.activo %}
+                                                        <span class="badge bg-secondary text-white"><i class="bi bi-archive-fill"></i> Convocatoria Cerrada en Catálogo</span>
+                                                    {% endif %}
+                                                </div>
                                             </td>
                                             <td class="py-2">
                                                 <span class="badge-area-pill" style="font-size: 0.68rem;">{{ det.curso.area.nombre }}</span>
@@ -168,6 +173,17 @@
                                 </tbody>
                             </table>
                         </div>
+
+                        {# ¿Por qué la insignia de convocatoria cerrada y la alerta informativa en mis_matriculas?: #}
+                        {# 1. Insignia Convocatoria Cerrada: Notifica transparentemente al estudiante que las admisiones al programa #}
+                        {#    finalizaron en el catálogo general, sin alterar su vacante oficial asignada. #}
+                        {# 2. Alerta Preventiva: Brinda certeza jurídica y académica indicando que el comprobante sigue 100% vigente #}
+                        {#    para el periodo acordado y recordando que conserva su facultad legal de solicitar retracto si así lo decide. #}
+                        {% if m.estado == 'PAGADO' and m.tiene_cursos_archivados %}
+                            <div class="alert alert-light border mt-3 mb-0 small text-muted">
+                                <i class="bi bi-info-circle text-primary"></i> <strong>Aviso Académico:</strong> La oferta pública de este programa se encuentra cerrada en el catálogo general. Tu reserva oficial y comprobante siguen vigentes para el periodo académico asignado. Si no deseas cursarlo, mantienes habilitada la opción de 'Solicitar Retracto / Anular'.
+                            </div>
+                        {% endif %}
                     </div>
 
                 </div>

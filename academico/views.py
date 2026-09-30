@@ -540,6 +540,10 @@ def catalogo_view(request):
     query = request.GET.get('q', '').strip()
     area_id = request.GET.get('area', '').strip()
 
+    # ¿Por qué el filtro estricto Curso.objects.filter(activo=True)?:
+    # Garantiza que el catálogo público para visitantes y postulantes solo liste programas vigentes.
+    # Los cursos archivados (activo=False) se ocultan totalmente para prevenir nuevas solicitudes de matrícula,
+    # resguardando la integridad operativa sin afectar a quienes ya se matricularon históricamente.
     cursos = Curso.objects.select_related('area').filter(activo=True)
 
     if query:
@@ -580,6 +584,7 @@ def catalogo_view(request):
 
 # Alias para compatibilidad de rutas
 portal_cursos_view = catalogo_view
+catalogo_cursos = catalogo_view
 
 
 @login_required
@@ -753,17 +758,24 @@ def panel_coordinador_view(request):
         messages.error(request, 'Acceso restringido: Se requieren permisos de Coordinador Académico.')
         return redirect('catalogo')
 
-    cursos = Curso.objects.select_related('area').all().order_by('area__nombre', 'titulo')
+    # ¿Por qué segmentar cursos_activos y cursos_archivados?:
+    # Permite al directivo supervisar el catálogo activo en tiempo real sin perder de vista
+    # los programas históricos retirados. Además, el cálculo de métricas de ocupación y cupos
+    # se ejecuta estrictamente sobre 'cursos_activos' para no distorsionar la capacidad operativa actual del campus.
+    cursos_activos = Curso.objects.select_related('area').filter(activo=True).order_by('area__nombre', 'titulo')
+    cursos_archivados = Curso.objects.select_related('area').filter(activo=False).order_by('-fecha_desactivacion', 'titulo')
     matriculas = Matricula.objects.select_related('estudiante').prefetch_related('detalles__curso').all().order_by('-fecha_creacion')
 
     total_estudiantes = CustomUser.objects.filter(rol=CustomUser.ROLE_ESTUDIANTE).count()
-    total_cupos_ofertados = cursos.aggregate(Sum('cupos_maximos'))['cupos_maximos__sum'] or 0
-    total_cupos_disponibles = cursos.aggregate(Sum('cupos_disponibles'))['cupos_disponibles__sum'] or 0
+    total_cupos_ofertados = cursos_activos.aggregate(Sum('cupos_maximos'))['cupos_maximos__sum'] or 0
+    total_cupos_disponibles = cursos_activos.aggregate(Sum('cupos_disponibles'))['cupos_disponibles__sum'] or 0
     total_cupos_ocupados = max(0, total_cupos_ofertados - total_cupos_disponibles)
     total_recaudado = matriculas.filter(estado=Matricula.ESTADO_PAGADO).aggregate(Sum('total'))['total__sum'] or Decimal('0.00')
 
     context = {
-        'cursos': cursos,
+        'cursos': cursos_activos,
+        'cursos_activos': cursos_activos,
+        'cursos_archivados': cursos_archivados,
         'matriculas': matriculas,
         'total_estudiantes': total_estudiantes,
         'total_cupos_ofertados': total_cupos_ofertados,
@@ -773,6 +785,88 @@ def panel_coordinador_view(request):
         'areas': AreaConocimiento.objects.all().order_by('nombre'),
     }
     return render(request, 'academico/panel_coordinador.html', context)
+
+
+# ¿Por qué esta vista y su control de acceso RBAC?:
+# 1. @login_required: Garantiza que la sesión del usuario directivo exista y sea válida.
+# 2. Verificación estricta de rol directivo (u.role == 'COORDINADOR' o u.is_staff): Previene
+#    vulnerabilidades de escalamiento vertical de privilegios (Privilege Escalation), asegurando que
+#    usuarios con rol ESTUDIANTE o anónimos no puedan aprovisionar cuentas de directivos.
+# 3. Procesamiento exclusivo vía POST: Protege contra peticiones predecibles o prefetching de navegadores.
+# 4. Hashing con set_password(): Aplica criptografía PBKDF2 con SHA-256 para almacenamiento seguro de credenciales.
+# 5. Redirección institucional: Retorna siempre a 'panel_coordinador' con feedback mediante django.contrib.messages.
+@login_required
+def crear_coordinador(request):
+    """
+    Vista protegida para el alta exclusiva de nuevos Coordinadores Académicos bajo arquitectura RBAC.
+    """
+    # 1. Verificación estricta de rol COORDINADOR (u.role == 'COORDINADOR' o u.is_staff)
+    if not (getattr(request.user, 'role', None) == 'COORDINADOR' or getattr(request.user, 'rol', None) == 'COORDINADOR' or request.user.is_staff or request.user.is_superuser):
+        messages.error(request, 'Acceso restringido: Se requieren permisos de Coordinador Académico para realizar esta acción.')
+        return redirect('panel_coordinador')
+
+    # 2. Procesar exclusivamente vía POST
+    if request.method != 'POST':
+        return redirect('panel_coordinador')
+
+    username = request.POST.get('username', '').strip()
+    first_name = request.POST.get('first_name', '').strip()
+    last_name = request.POST.get('last_name', '').strip()
+    nombre_completo = request.POST.get('nombre_completo', '').strip()
+    email = request.POST.get('email', '').strip()
+    password = request.POST.get('password', '')
+    confirm_password = request.POST.get('confirm_password', '')
+
+    # Soporte unificado si el nombre se envía compuesto o separado
+    if nombre_completo and not (first_name or last_name):
+        if ' ' in nombre_completo:
+            first_name, last_name = nombre_completo.split(' ', 1)
+        else:
+            first_name = nombre_completo
+            last_name = ''
+    elif not nombre_completo and (first_name or last_name):
+        nombre_completo = f"{first_name} {last_name}".strip()
+
+    # 3. Validar campos obligatorios
+    if not username or not password or not confirm_password:
+        messages.error(request, 'Por favor complete todos los campos obligatorios.')
+        return redirect('panel_coordinador')
+
+    # 4. Validar que las contraseñas coincidan
+    if password != confirm_password:
+        messages.error(request, 'Las contraseñas no coinciden. Por favor verifíquelas.')
+        return redirect('panel_coordinador')
+
+    # 5. Validar longitud mínima de contraseña (al menos 4 caracteres)
+    if len(password) < 4:
+        messages.error(request, 'La contraseña debe contener al menos 4 caracteres.')
+        return redirect('panel_coordinador')
+
+    # 6. Validar que el username no exista previamente
+    if CustomUser.objects.filter(username=username).exists():
+        messages.error(request, f'El nombre de usuario "{username}" ya está registrado. Por favor elija otro.')
+        return redirect('panel_coordinador')
+
+    # 7. Validar que el email no exista previamente
+    if email and CustomUser.objects.filter(email=email).exists():
+        messages.error(request, f'El correo electrónico "{email}" ya se encuentra registrado.')
+        return redirect('panel_coordinador')
+
+    # 8. Instanciar CustomUser con role='COORDINADOR', encriptar clave con set_password() y guardar
+    nuevo_coordinador = CustomUser(
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        email=email,
+        rol=CustomUser.ROLE_COORDINADOR,
+        role=CustomUser.ROLE_COORDINADOR,
+    )
+    nuevo_coordinador.set_password(password)
+    nuevo_coordinador.save()
+
+    messages.success(request, f'¡Coordinador "{username}" dado de alta exitosamente en la plataforma!')
+    return redirect('panel_coordinador')
+
 
 
 @login_required
@@ -1227,32 +1321,59 @@ def editar_curso_coordinador_view(request, curso_id):
     return redirect('catalogo')
 
 
-# ¿Por qué esta lógica de eliminación con verificación de integridad referencial?:
-# 1. Si curso.detallematricula_set.exists(): Impide borrar cursos con matrículas oficiales registradas,
-#    respetando on_delete=PROTECT y protegiendo el historial financiero y académico de la institución.
-# 2. Si no tiene matrículas: Limpia primero los carritos pendientes (curso.itemcarro_set.all().delete())
-#    para que ningún estudiante sufra errores de referencia al intentar pagar un curso ya inexistente.
+# ¿Por qué patrón de Borrado Lógico (Soft Delete) en lugar de Hard Delete?:
+# 1. Integridad referencial y trazabilidad contable: El registro de Curso permanece en PostgreSQL,
+#    salvaguardando las matrículas históricas y comprobantes oficiales ya emitidos.
+# 2. Reversibilidad y auditoría: Se registra la marca temporal exacta en 'fecha_desactivacion' y
+#    se apaga la bandera 'activo = False', permitiendo al coordinador revertir la baja en cualquier momento.
+# 3. Limpieza defensiva de carritos: Se purgan los ItemCarro activos para que ningún estudiante
+#    pueda continuar al checkout con un programa retirado de oferta académica.
 @login_required
 @user_passes_test(lambda u: u.is_authenticated and (getattr(u, 'role', None) == 'COORDINADOR' or getattr(u, 'rol', None) == 'COORDINADOR' or u.is_staff or u.is_superuser), login_url='catalogo')
 @require_POST
 def eliminar_curso_coordinador_view(request, curso_id):
     """
-    Eliminación de cursos con verificación de integridad referencial.
-    Impide eliminar cursos con matrículas oficiales y limpia ítems de carro pendientes.
+    Baja lógica (Soft Delete) de cursos protegiendo la integridad referencial histórica.
+    Archiva el curso seteando activo=False y registrando fecha_desactivacion sin destruir registros en PostgreSQL.
     """
     curso = get_object_or_404(Curso, id=curso_id)
 
-    # Verificación de integridad referencial para evitar pérdida de registros académicos
-    if curso.detallematricula_set.exists():
-        messages.error(request, f"Imposible eliminar '{curso.titulo}': posee matrículas oficiales registradas. Utilice 'Pausar Admisión'.")
-    else:
-        titulo = curso.titulo
-        # Limpieza de ítems en carros de compra antes de eliminar el curso físicamente
-        curso.itemcarro_set.all().delete()
-        curso.delete()
-        messages.success(request, f"Curso '{titulo}' eliminado definitivamente del catálogo.")
+    curso.activo = False
+    curso.fecha_desactivacion = timezone.now()
+    curso.save(update_fields=['activo', 'fecha_desactivacion'])
 
-    return redirect('catalogo')
+    # Limpieza de ítems en carros de compra antes de archivarlo
+    curso.itemcarro_set.all().delete()
+
+    messages.success(request, "El programa ha sido archivado y retirado del catálogo público sin alterar registros históricos.")
+    return redirect('panel_coordinador')
+
+eliminar_curso = eliminar_curso_coordinador_view
+archivar_curso = eliminar_curso_coordinador_view
+
+
+# ¿Por qué reactivar_curso(request, curso_id) y su control RBAC?:
+# Proporciona una acción de reincorporación formal exclusiva para el rol COORDINADOR vía POST.
+# Restaura 'activo = True' y reinicia 'fecha_desactivacion = None', reincorporando el curso
+# a la oferta de admisiones del catálogo público de manera inmediata sin duplicar registros.
+@login_required
+@user_passes_test(lambda u: u.is_authenticated and (getattr(u, 'role', None) == 'COORDINADOR' or getattr(u, 'rol', None) == 'COORDINADOR' or u.is_staff or u.is_superuser), login_url='catalogo')
+@require_POST
+def reactivar_curso(request, curso_id):
+    """
+    Reactivación de programas académicos archivados (exclusivo para COORDINADOR).
+    Restaura activo=True y limpia fecha_desactivacion.
+    """
+    curso = get_object_or_404(Curso, id=curso_id)
+
+    curso.activo = True
+    curso.fecha_desactivacion = None
+    curso.save(update_fields=['activo', 'fecha_desactivacion'])
+
+    messages.success(request, "El programa ha sido reactivado y vuelve a estar visible en el catálogo de admisiones.")
+    return redirect('panel_coordinador')
+
+reactivar_curso_view = reactivar_curso
 
 
 # ==============================================================================

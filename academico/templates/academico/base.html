@@ -515,7 +515,7 @@
                     {% endif %}
 
                         {# Rutas exclusivas: SOLO visibles para rol COORDINADOR o STAFF #}
-                        {% if user.rol == 'COORDINADOR' or user.role == 'COORDINADOR' or user.is_staff or user.is_coordinador %}
+                        {% if user.is_authenticated and user.role == 'COORDINADOR' %}
                             <li class="nav-item">
                                 <a class="nav-link text-warning fw-semibold {% if request.resolver_match.url_name == 'panel_coordinador' %}active{% endif %}" href="{% url 'panel_coordinador' %}" id="nav-coordinador-link">
                                     <i class="bi bi-speedometer2 me-1"></i> Panel Coordinador
@@ -602,7 +602,7 @@
                                         </a>
                                     </li>
                                 {% endif %}
-                                {% if user.rol == 'COORDINADOR' or user.role == 'COORDINADOR' or user.is_staff or user.is_coordinador %}
+                                {% if user.is_authenticated and user.role == 'COORDINADOR' %}
                                     <li>
                                         <a class="dropdown-item rounded-2 py-2" href="{% url 'panel_coordinador' %}">
                                             <i class="bi bi-shield-lock me-2 text-warning"></i> Administración de Cupos
@@ -676,6 +676,11 @@
                     <span class="highlight-meta">Sección:</span> <span class="text-light fw-bold">{{ ALUMNO_SECCION|default:"AP-N4-C2" }}</span> 
                     <span class="text-secondary mx-2">|</span> 
                     <span class="highlight-meta">Año:</span> <span class="text-light fw-bold">{{ ALUMNO_ANIO|default:"2026" }}</span>
+                </div>
+            </div>
+            <div class="row mt-2 pt-2 border-top border-secondary border-opacity-25">
+                <div class="col-12 text-center">
+                    <small><a href="{% url 'swagger-ui' %}" class="text-muted text-decoration-none"><i class="bi bi-code-slash"></i> Documentación Técnica OpenAPI / Swagger</a></small>
                 </div>
             </div>
         </div>

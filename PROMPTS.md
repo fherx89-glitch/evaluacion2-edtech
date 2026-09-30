@@ -43,6 +43,15 @@
 * **Prompt 2.5 (Inhabilitación del Panel de Administración por Defecto y Protección 404 Institucional):**
   > "Por requerimiento de seguridad institucional y buenas prácticas, inhabilita el acceso al panel administrativo por defecto de Django en `config/urls.py`: comenta o retira la ruta `path('admin/', admin.site.urls)`. Asegúrate de que cualquier intento de entrar a `/admin/` o rutas inexistentes sea interceptado por el manejador de error 404 institucional (`templates/academico/404.html`), garantizando la continuidad operativa de las vistas del coordinador (`panel_coordinador`, `catalogo`, modales de edición/eliminación) y los endpoints Swagger de la API sin dependencia de `admin.site`."
 
+* **Prompt 2.6 (Aprovisionamiento Seguro de Nuevos Directivos y Prevención de Escalamiento RBAC):**
+  > "Implementa el aprovisionamiento seguro de directivos académicos ('Alta de Coordinadores') exclusivo desde el panel administrativo privado bajo arquitectura Role-Based Access Control (RBAC):
+  > 1. **Prevención de Escalamiento de Privilegios (Privilege Escalation):** El registro público de usuarios (`templates/academico/registro.html` y `registro_estudiante_view`) permanece estrictamente fijado al rol `ESTUDIANTE` en backend, neutralizando vectores de inyección por asignación masiva (*Mass Assignment*).
+  > 2. **Segregación de Responsabilidades (SoD):** Solo los usuarios autenticados con rol directivo (`COORDINADOR` o credenciales de `is_staff`) tienen autorización para dar de alta a nuevos coordinadores mediante la vista protegida `crear_coordinador(request)`. Cualquier petición no autorizada emitida por estudiantes o usuarios anónimos es inmediatamente interceptada y rechazada.
+  > 3. **Procesamiento Restringido por Método POST:** La vista procesa exclusivamente peticiones HTTP POST, bloqueando prefetching y peticiones GET predecibles.
+  > 4. **Validación Integral de Credenciales:** Verifica la unicidad estricta de `username` y `email`, la correspondencia mutua de contraseñas (`password == confirm_password`) y una longitud mínima de seguridad.
+  > 5. **Hashing Criptográfico y Persistencia:** Instancia `CustomUser` con `role='COORDINADOR'` aplicando el algoritmo seguro PBKDF2/SHA-256 (`set_password()`), retornando feedback institucional a través de `django.contrib.messages` y redirigiendo siempre al `panel_coordinador`.
+  > 6. **Interfaz de Control Directivo:** En la cabecera de `panel_coordinador.html`, integra el botón institucional `<i class='bi bi-person-plus-fill'></i> Registrar Nuevo Coordinador` junto al modal in-situ `#modalCrearCoordinador` con validación defensiva del lado del cliente."
+
 ---
 
 ## 3. Lógica Transaccional y Control de Cupos
@@ -75,6 +84,28 @@
 
 * **Prompt 4.4 (Asistencia Reactiva en Formularios y Modales In-Situ):**
   > "En el catálogo, añade modales in-situ `modalEditarCurso{{ curso.id }}` y `modalNuevoCurso`. Desarrolla scripts JavaScript de asistencia defensiva en tiempo real (UX) que sincronicen la cantidad de computadores con los cupos sugeridos, ajusten dinámicamente el límite máximo `inputCupos.max = pcs` y desactiven el botón de envío si el usuario intenta exceder la capacidad de la sala."
+
+* **Prompt 4.5 (Patrón de Borrado Lógico - Soft Delete, Reactivación y Preservación Histórica y Contable):**
+  > "Implementa el patrón de Borrado Lógico (*Soft Delete*) y reactivación de programas académicos en el catálogo y panel directivo:
+  > 1. **Integridad Referencial y Trazabilidad Histórica:** En lugar de ejecutar destrucción física (`curso.delete()` / *Hard Delete*) —lo cual corrompe llaves foráneas en `DetalleMatricula`, rompe la trazabilidad contable o exige cascadas destructivas—, el modelo `Curso` preserva su estado operativo mediante `activo = models.BooleanField(default=True)` y `fecha_desactivacion = models.DateTimeField(null=True, blank=True)`.
+  > 2. **Refactorización a Borrado Lógico en `eliminar_curso_coordinador_view`:**
+  >    - Vista protegida exclusivamente para directivos con rol `COORDINADOR`.
+  >    - Si el curso tiene ítems activos en carritos de compra de estudiantes (`ItemCarro`), se purgan de forma defensiva para prevenir inconsistencias en checkout.
+  >    - Se marca `curso.activo = False` y `curso.fecha_desactivacion = timezone.now()`, persistiendo con `curso.save(update_fields=['activo', 'fecha_desactivacion'])` sin eliminar la tupla en PostgreSQL.
+  >    - Emite mensaje flash institucional: *'El programa ha sido archivado y retirado del catálogo público sin alterar registros históricos.'* y redirige a `panel_coordinador`.
+  > 3. **Reactivación Operativa (`reactivar_curso`):**
+  >    - Vista exclusiva para directivos (`COORDINADOR`) protegida por método POST.
+  >    - Restituye `curso.activo = True` y `curso.fecha_desactivacion = None`, reincorporando de inmediato el programa a la oferta académica visible.
+  >    - Emite mensaje flash: *'El programa ha sido reactivado y vuelve a estar visible en el catálogo de admisiones.'* y redirige a `panel_coordinador`.
+  > 4. **Segregación de Consultas y Catálogo Público:**
+  >    - La vista pública del catálogo (`catalogo_cursos` / `catalogo_view`) aplica un filtro base estricto `Curso.objects.filter(activo=True)`, garantizando que postulantes y estudiantes jamás visualicen programas archivados.
+  >    - En `panel_coordinador_view`, se segmenta explícitamente `cursos_activos` de `cursos_archivados`, recalculando aforos y cupos únicamente sobre los programas en operación activa.
+  > 5. **Interfaz de Gestión y Auditoría en `panel_coordinador.html`:**
+  >    - Reemplaza en el catálogo la acción destructiva por 'Archivar / Dar de Baja'.
+  >    - Incorpora la sección y pestaña dedicada *'Historial de Programas Archivados ({{ cursos_archivados|length }})'*, mostrando nombre, área, fecha/hora de retiro y el botón transaccional seguro *'<i class=\"bi bi-arrow-counterclockwise\"></i> Reactivar Programa'*.
+  > 6. **Trazabilidad Informativa y Feedback Visual de Programas Archivados:**
+  >    - En `panel_coordinador.html`, el modal de confirmación `#modalArchivarCurso-{{ c.id }}` incorpora la advertencia preventiva obligatoria: *\"Si este curso cuenta con estudiantes matriculados, se mantendrán sus comprobantes históricos intactos y solo se suspenderá la admisión a nuevos postulantes.\"*
+  >    - En `mis_matriculas.html`, si un programa formalizado en una matrícula activa (`PAGADO`) es archivado posteriormente por el coordinador, se despliega la insignia sutil `<span class=\"badge bg-secondary text-white\"><i class=\"bi bi-archive-fill\"></i> Convocatoria Cerrada en Catálogo</span>` junto al título del curso, y se exhibe en el comprobante la alerta institucional: *\"Aviso Académico: La oferta pública de este programa se encuentra cerrada en el catálogo general. Tu reserva oficial y comprobante siguen vigentes para el periodo académico asignado. Si no deseas cursarlo, mantienes habilitada la opción de 'Solicitar Retracto / Anular'.\"*
 
 ---
 
@@ -155,5 +186,14 @@
   > - En `urls.py`: justificación de la segregación de endpoints dedicados por rol.
   > - En plantillas HTML: comentarios `{# ¿Por qué ...?: #}` documentando la solución a los conflictos de apilamiento (*stacking context*), *foster-parenting* y aislamiento de modales de Bootstrap fuera de tablas y tarjetas."
 
+* **Prompt 6.9 (Estandarización de Comentarios Pedagógicos en Soft Delete, Reactivación y Feedback de Programas Archivados):**
+  > "Incorpora y estandariza los comentarios explicativos con el patrón pedagógico institucional (`# ¿Por qué <técnica/decisión>?: <fundamento>` en Python y `{# ¿Por qué ...?: <fundamento> #}` en plantillas Django) en todos los módulos de Borrado Lógico y Reactivación de Programas:
+  > - En `academico/models.py`: justificación de los campos `activo` y `fecha_desactivacion` en `Curso`, y de la propiedad `tiene_cursos_archivados` en `Matricula`.
+  > - En `academico/views.py`: justificación del filtrado estricto `Curso.objects.filter(activo=True)` en `catalogo_view`, la segregación de `cursos_activos` y `cursos_archivados` en `panel_coordinador_view`, el resguardo de integridad referencial histórica en `eliminar_curso_coordinador_view` (Soft Delete) y la restauración limpia de oferta en `reactivar_curso`.
+  > - En `academico/urls.py`: justificación de los endpoints segregados `coordinador/curso/<int:curso_id>/archivar/` y `coordinador/curso/<int:curso_id>/reactivar/`.
+  > - En `mis_matriculas.html`: justificación de la insignia 'Convocatoria Cerrada en Catálogo' y de la alerta informativa preventiva en comprobantes pagados.
+  > - En `panel_coordinador.html`: justificación del modal `#modalArchivarCurso-{{ c.id }}` con advertencia preventiva sobre la preservación de órdenes históricas y de la sección 'Historial de Programas Archivados'."
+
 ---
 *Nota: Este archivo es puramente documental y no debe ser importado por ningún módulo de Python.*
+

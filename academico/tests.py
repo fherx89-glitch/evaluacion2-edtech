@@ -595,35 +595,78 @@ class EdTechTestSuite(TestCase):
         self.assertEqual(self.curso_django.cupos_maximos, 18)
         self.assertEqual(self.curso_django.laboratorio, 'Lab Innovación 5')
 
-        # ¿Por qué probamos rechazar la eliminación si existen matrículas oficiales?:
-        # Aquí utilicé la creación de una Matricula formal con DetalleMatricula para comprobar que el sistema
-        # impida borrar cursos que poseen un historial financiero o académico activo, garantizando
-        # la integridad referencial de la base de datos y la trazabilidad contable institucional.
-        matr = Matricula.objects.create(estudiante=self.estudiante, estado=Matricula.ESTADO_PAGADO, total=Decimal('480000.00'))
-        DetalleMatricula.objects.create(matricula=matr, curso=self.curso_django, precio_historico=Decimal('480000.00'))
+        # =========================================================================
+        # PATRÓN DE BORRADO LÓGICO (SOFT DELETE) Y REACTIVACIÓN DE PROGRAMAS
+        # =========================================================================
+        # ¿Por qué borrado lógico (Soft Delete)?:
+        # Garantiza la integridad referencial y trazabilidad histórica en PostgreSQL sin destruir
+        # registros académicos. Al archivar, activo pasa a False y se registra fecha_desactivacion.
+        # El programa desaparece del catálogo público para estudiantes pero permanece en la base de datos
+        # y puede ser reactivado en cualquier momento por el coordinador desde su panel.
 
-        del_url = reverse('eliminar_curso_coordinador', kwargs={'curso_id': self.curso_django.id})
-        resp_del_fail = self.client.post(del_url, follow=True)
-        self.assertEqual(resp_del_fail.status_code, 200)
-        # Verificar que el curso NO se eliminó
-        self.assertTrue(Curso.objects.filter(id=self.curso_django.id).exists())
-        msg_list_del = [m.message for m in get_messages(resp_del_fail.wsgi_request)]
-        self.assertTrue(any("Imposible eliminar" in m and "posee matrículas oficiales registradas" in m for m in msg_list_del))
-
-        # ¿Por qué probamos el borrado seguro limpiando los ítems de carro pendientes?:
-        # Aquí utilicé un ItemCarro para certificar que si un curso no tiene matrículas pero sí está
-        # en el carro de algún estudiante, se purguen primero los carritos para no dejar registros huérfanos.
+        # 1. Limpieza de carritos pendientes al archivar
         carro, _ = CarroMatricula.objects.get_or_create(estudiante=self.estudiante)
         ItemCarro.objects.create(carro=carro, curso=curso_conflicto)
         self.assertTrue(ItemCarro.objects.filter(curso=curso_conflicto).exists())
 
+        # 2. El coordinador archiva el curso (Soft Delete)
         del_conflicto_url = reverse('eliminar_curso_coordinador', kwargs={'curso_id': curso_conflicto.id})
         resp_del_ok = self.client.post(del_conflicto_url, follow=True)
         self.assertEqual(resp_del_ok.status_code, 200)
-        self.assertFalse(Curso.objects.filter(id=curso_conflicto.id).exists())
+        self.assertRedirects(resp_del_ok, reverse('panel_coordinador'))
+
+        # Verificar que el curso NO se eliminó de PostgreSQL (Soft Delete)
+        self.assertTrue(Curso.objects.filter(id=curso_conflicto.id).exists())
+        curso_conflicto.refresh_from_db()
+        self.assertFalse(curso_conflicto.activo)
+        self.assertIsNotNone(curso_conflicto.fecha_desactivacion)
+        # Verificar que se purgaron los ítems en carros pendientes
         self.assertFalse(ItemCarro.objects.filter(curso=curso_conflicto).exists())
+
         msg_list_ok = [m.message for m in get_messages(resp_del_ok.wsgi_request)]
-        self.assertTrue(any("eliminado definitivamente del catálogo" in m for m in msg_list_ok))
+        self.assertTrue(any("archivado y retirado del catálogo público" in m for m in msg_list_ok))
+
+        # 3. Verificar que el curso archivado desaparezca del catálogo del estudiante
+        self.client.force_login(self.estudiante)
+        resp_cat_est = self.client.get(reverse('catalogo'))
+        self.assertNotContains(resp_cat_est, curso_conflicto.titulo)
+
+        # 4. Verificar advertencia visual preventiva en el modal de archivado del panel del coordinador
+        self.client.force_login(self.coordinador)
+        resp_panel_coord = self.client.get(reverse('panel_coordinador'))
+        self.assertContains(resp_panel_coord, "Si este curso cuenta con estudiantes matriculados, se mantendrán sus comprobantes históricos intactos y solo se suspenderá la admisión a nuevos postulantes.")
+
+        # 5. Verificar feedback visual en comprobante del estudiante cuando el curso matriculado fue archivado
+        matr_archivada = Matricula.objects.create(
+            estudiante=self.estudiante,
+            estado=Matricula.ESTADO_PAGADO,
+            total=Decimal('300000.00')
+        )
+        DetalleMatricula.objects.create(
+            matricula=matr_archivada,
+            curso=curso_conflicto,
+            precio_historico=Decimal('300000.00')
+        )
+        self.client.force_login(self.estudiante)
+        resp_mis_matr = self.client.get(reverse('mis_matriculas'))
+        self.assertContains(resp_mis_matr, "Convocatoria Cerrada en Catálogo")
+        self.assertContains(resp_mis_matr, "Aviso Académico:</strong> La oferta pública de este programa se encuentra cerrada en el catálogo general.")
+
+        # 6. El coordinador reactiva el curso archivado
+        self.client.force_login(self.coordinador)
+        reactivar_url = reverse('reactivar_curso', kwargs={'curso_id': curso_conflicto.id})
+        resp_reactivar = self.client.post(reactivar_url, follow=True)
+        self.assertEqual(resp_reactivar.status_code, 200)
+        self.assertRedirects(resp_reactivar, reverse('panel_coordinador'))
+
+        # Verificar que el curso vuelve a estar activo y sin fecha_desactivacion
+        curso_conflicto.refresh_from_db()
+        self.assertTrue(curso_conflicto.activo)
+        self.assertIsNone(curso_conflicto.fecha_desactivacion)
+
+        # Verificar que vuelve a aparecer en el catálogo público
+        resp_cat_reactivado = self.client.get(reverse('catalogo'))
+        self.assertContains(resp_cat_reactivado, curso_conflicto.titulo)
 
     # =========================================================================
     # TEST 14: CICLO DE VIDA Y ANULACIÓN DE MATRÍCULA POR EL ESTUDIANTE (RETRACTO)
@@ -810,6 +853,79 @@ class EdTechTestSuite(TestCase):
         self.assertIn('ANULADA', content)
         self.assertIn('Matrícula Anulada el', content)
         self.assertIn('Retracto voluntario formal', content)
+
+    # =========================================================================
+    # TEST 17: ALTA SEGURA DE COORDINADORES BAJO ARQUITECTURA RBAC
+    # =========================================================================
+    # ¿Por qué este test?:
+    # Valida el aprovisionamiento seguro de directivos garantizando:
+    # 1. Que un estudiante NO pueda enviar peticiones a esta vista (HTTP 403 o redirección 302).
+    # 2. Que un coordinador sí pueda registrar exitosamente a otro directivo con rol 'COORDINADOR',
+    #    contraseña encriptada mediante PBKDF2/SHA-256 (set_password) y persistencia íntegra.
+    # 3. Que el panel del coordinador renderice el botón institucional y modal correspondiente.
+    def test_alta_coordinador_rbac(self):
+        """
+        Prueba de seguridad RBAC para la creación exclusiva de nuevos Coordinadores:
+        - Acceso restringido para estudiantes (redirección / 403).
+        - Alta exitosa por parte de un usuario Coordinador.
+        - Validación de hashing seguro de contraseñas y asignación del rol 'COORDINADOR'.
+        """
+        # 1. Comprobar que en el panel del coordinador se renderiza el botón del modal
+        self.client.force_login(self.coordinador)
+        resp_panel = self.client.get(reverse('panel_coordinador'))
+        self.assertEqual(resp_panel.status_code, 200)
+        self.assertContains(resp_panel, 'Registrar Nuevo Coordinador')
+        self.assertContains(resp_panel, 'modalCrearCoordinador')
+
+        post_data = {
+            'username': 'nuevo_coordinador_2026',
+            'first_name': 'Claudia',
+            'last_name': 'González',
+            'nombre_completo': 'Claudia González',
+            'email': 'claudia.coord@edtech.cl',
+            'password': 'CoordPassword2026!',
+            'confirm_password': 'CoordPassword2026!',
+        }
+
+        # 2. Un estudiante autenticado intenta registrar un nuevo coordinador -> Rechazado (HTTP 403 o redirección 302)
+        self.client.force_login(self.estudiante)
+        resp_estudiante = self.client.post(reverse('crear_coordinador'), data=post_data)
+        self.assertIn(resp_estudiante.status_code, [302, 403])
+        # Aseguramos que NO se haya creado el usuario
+        self.assertFalse(User.objects.filter(username='nuevo_coordinador_2026').exists())
+
+        # 3. Un usuario anónimo (sin sesión) intenta registrar un coordinador -> Redirigido (login)
+        self.client.logout()
+        resp_anon = self.client.post(reverse('crear_coordinador'), data=post_data)
+        self.assertIn(resp_anon.status_code, [302, 403])
+        self.assertFalse(User.objects.filter(username='nuevo_coordinador_2026').exists())
+
+        # 4. Un coordinador autenticado registra exitosamente al nuevo directivo
+        self.client.force_login(self.coordinador)
+        resp_coord = self.client.post(reverse('crear_coordinador'), data=post_data, follow=True)
+        self.assertEqual(resp_coord.status_code, 200)
+        self.assertRedirects(resp_coord, reverse('panel_coordinador'))
+        self.assertContains(resp_coord, 'dado de alta exitosamente')
+
+        # 5. Validar existencia, rol COORDINADOR y contraseña encriptada
+        nuevo_coord = User.objects.get(username='nuevo_coordinador_2026')
+        self.assertEqual(nuevo_coord.rol, User.ROLE_COORDINADOR)
+        self.assertEqual(nuevo_coord.role, 'COORDINADOR')
+        self.assertTrue(nuevo_coord.is_coordinador)
+        self.assertTrue(nuevo_coord.check_password('CoordPassword2026!'))
+        self.assertEqual(nuevo_coord.email, 'claudia.coord@edtech.cl')
+        self.assertEqual(nuevo_coord.first_name, 'Claudia')
+        self.assertEqual(nuevo_coord.last_name, 'González')
+
+        # 6. Validar que no se permita registrar con contraseñas que no coincidan
+        post_data_invalida = post_data.copy()
+        post_data_invalida['username'] = 'otro_coord_invalido'
+        post_data_invalida['password'] = 'Pass1234!'
+        post_data_invalida['confirm_password'] = 'NoCoincide!'
+        resp_mismatch = self.client.post(reverse('crear_coordinador'), data=post_data_invalida, follow=True)
+        self.assertContains(resp_mismatch, 'Las contraseñas no coinciden')
+        self.assertFalse(User.objects.filter(username='otro_coord_invalido').exists())
+
 
 
 
