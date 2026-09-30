@@ -195,6 +195,18 @@ class EdTechTestSuite(TestCase):
         self.assertEqual(json_data['status'], 404)
         self.assertEqual(json_data['datos_evaluacion']['alumno'], 'Fernando Pailahueque')
 
+        # ¿Por qué verificamos la inhabilitación del panel /admin/?:
+        # Aquí utilicé self.client.get('/admin/') para validar que por requerimiento de seguridad
+        # institucional y buenas prácticas, el acceso al panel administrativo por defecto de Django
+        # esté inhabilitado en config/urls.py y sea interceptado por el manejador de error 404 institucional
+        # (templates/academico/404.html), mostrando la información del alumno Fernando Pailahueque (AP-N4-C2, 2026).
+        admin_resp = self.client.get('/admin/')
+        self.assertEqual(admin_resp.status_code, 404)
+        self.assertContains(admin_resp, 'Fernando Pailahueque', status_code=404)
+        self.assertContains(admin_resp, 'AP-N4-C2', status_code=404)
+        self.assertContains(admin_resp, '2026', status_code=404)
+        self.assertTemplateUsed(admin_resp, 'academico/404.html')
+
     # =========================================================================
     # TEST 7: PERMISOS VISUALES EN EL NAVBAR POR ROL
     # =========================================================================

@@ -40,6 +40,9 @@
 * **Prompt 2.4 (Registro Público de Estudiantes Seguro contra Mass Assignment):**
   > "Crea la vista pública de registro de estudiantes en `registro_estudiante_view` y la plantilla `registro.html`. Asigna incondicionalmente en el backend `rol = ROLE_ESTUDIANTE` sin exponer ningún selector de roles en el formulario para evitar vulnerabilidades de elevación de privilegios (*Mass Assignment*). Hashea la contraseña con `user.set_password()` usando PBKDF2/SHA-256 e inicializa de inmediato la instancia `CarroMatricula` individual."
 
+* **Prompt 2.5 (Inhabilitación del Panel de Administración por Defecto y Protección 404 Institucional):**
+  > "Por requerimiento de seguridad institucional y buenas prácticas, inhabilita el acceso al panel administrativo por defecto de Django en `config/urls.py`: comenta o retira la ruta `path('admin/', admin.site.urls)`. Asegúrate de que cualquier intento de entrar a `/admin/` o rutas inexistentes sea interceptado por el manejador de error 404 institucional (`templates/academico/404.html`), garantizando la continuidad operativa de las vistas del coordinador (`panel_coordinador`, `catalogo`, modales de edición/eliminación) y los endpoints Swagger de la API sin dependencia de `admin.site`."
+
 ---
 
 ## 3. Lógica Transaccional y Control de Cupos

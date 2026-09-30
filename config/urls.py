@@ -16,8 +16,13 @@ from drf_spectacular.views import (
 from academico.views import CustomTokenObtainPairView, custom_404_view
 
 urlpatterns = [
-    # Panel de administración de Django
-    path('admin/', admin.site.urls),
+    # =========================================================================
+    # PANEL DE ADMINISTRACIÓN POR DEFECTO DE DJANGO (INHABILITADO)
+    # Por requerimiento de seguridad institucional y buenas prácticas, se deshabilita
+    # la ruta admin.site.urls. Cualquier intento de acceso a '/admin/' o rutas no mapeadas
+    # es interceptado por el manejador 404 institucional (templates/academico/404.html).
+    # =========================================================================
+    # path('admin/', admin.site.urls),
 
     # Autenticación JWT con claims personalizados
     path('api/token/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),
